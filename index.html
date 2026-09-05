@@ -279,6 +279,8 @@ function fmtDDMMYYYY(d) {
 <button onclick="location.reload()" style="background:none;border:1px solid #2a3050;border-radius:8px;padding:6px 10px;color:#94a3b8;font-size:18px;cursor:pointer;flex-shrink:0" title="Actualizar">🔄</button>
 <button onclick="toggleGlobalSearch(event)" style="background:none;border:1px solid #2a3050;border-radius:8px;padding:6px 10px;color:#94a3b8;font-size:18px;cursor:pointer;flex-shrink:0" title="Buscar">🔍</button>
 <button onclick="goTab('config')" style="background:none;border:1px solid #2a3050;border-radius:8px;padding:6px 10px;color:#94a3b8;font-size:18px;cursor:pointer;flex-shrink:0" title="Configuración">⚙️</button>
+<span id="app-version-badge" style="font-size:9px;color:#475569;flex-shrink:0;align-self:center;margin-left:-4px" title="Versión de la app">v592</span>
+<span id="offline-badge" style="display:none;font-size:11px;color:#f59e0b;flex-shrink:0;align-self:center;white-space:nowrap" title="Sin conexión a internet — los cambios se guardarán localmente y se sincronizarán al recuperar señal">📶⚠️</span>
 </div>
 
 <!-- Alerta de Drive desconectado -->
@@ -9776,18 +9778,21 @@ async function driveEnsureToken() {
   try {
     const res = await fetch(DRIVE_GAS_URL + '?action=refresh&refresh_token=' + encodeURIComponent(refresh));
     if (!res.ok) {
-      toast('⚠️ Drive: error HTTP ' + res.status + ' al renovar token', '#ef4444');
+      // Falla temporal del servidor/red — NO se desconecta Drive, solo se avisa discretamente y se reintenta después
+      setTempConnIssue(true);
+      toast('⚠️ Drive: sin respuesta al renovar token (temporal)', '#f59e0b');
       return false;
     }
     const data = await res.json();
     if (data.access_token) {
+      setTempConnIssue(false);
       _driveToken = data.access_token;
       _driveTokenExpiry = Date.now() + (data.expires_in || 3600) * 1000 - 60000;
       localStorage.setItem('gpgt_drive_token', data.access_token);
       localStorage.setItem('gpgt_drive_expiry', String(_driveTokenExpiry));
       return true;
     }
-    // Token inválido — limpiar y mostrar reconexión
+    // Solo una revocación confirmada por Google (invalid_grant) desconecta Drive de verdad
     if (data.error === 'invalid_grant') {
       _driveToken = null;
       _driveRefreshToken = null;
@@ -9796,21 +9801,50 @@ async function driveEnsureToken() {
       renderDriveStatus();
       toast('⚠️ Drive desconectado (token revocado) — reconecta en Empresa', '#ef4444');
     } else {
-      // Respuesta no reconocida del servicio: limpiar la conexión rota automáticamente
-      // para que el usuario solo tenga que tocar "Conectar" de nuevo, sin quedar en un estado inconsistente.
-      _driveToken = null;
-      _driveRefreshToken = null;
-      localStorage.removeItem('gpgt_drive_refresh');
-      localStorage.removeItem('gpgt_drive_token');
-      renderDriveStatus();
-      toast('⚠️ Drive: la conexión dejó de responder — vuelve a conectar en Empresa', '#ef4444');
+      // Respuesta no reconocida (probablemente por una conexión inestable) — falla temporal, NO se borra la conexión
+      setTempConnIssue(true);
+      toast('⚠️ Drive: respuesta inesperada al renovar token (temporal) — se reintentará', '#f59e0b');
     }
     return false;
   } catch(e) {
-    toast('⚠️ Drive: error de red al renovar token — ' + e.message, '#ef4444');
+    // Error de red (sin señal, timeout, etc.) — falla temporal, NO se borra la conexión
+    setTempConnIssue(true);
+    toast('⚠️ Drive: sin conexión al renovar token — se reintentará', '#f59e0b');
     return false;
   }
 }
+
+// Indicador discreto de problema temporal de conexión (no desconecta Drive, solo informa)
+let _tempConnIssue = false;
+function setTempConnIssue(active) {
+  _tempConnIssue = active;
+  updateOfflineBadge();
+}
+
+function updateOfflineBadge() {
+  const b = document.getElementById('offline-badge');
+  if (!b) return;
+  const offline = !navigator.onLine || _tempConnIssue;
+  b.style.display = offline ? 'inline' : 'none';
+}
+
+// Al recuperar conexión (o volver de segundo plano), reintenta silenciosamente y refresca el estado real de Drive
+async function recheckDriveOnResume() {
+  updateOfflineBadge();
+  if (!navigator.onLine) return;
+  const hasRefresh = _driveRefreshToken || localStorage.getItem('gpgt_drive_refresh');
+  if (hasRefresh) {
+    setTempConnIssue(false);
+    await driveEnsureToken();
+  }
+  renderDriveStatus();
+}
+
+window.addEventListener('online', () => { setTempConnIssue(false); recheckDriveOnResume(); });
+window.addEventListener('offline', () => { updateOfflineBadge(); });
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') recheckDriveOnResume();
+});
 
 async function driveRestoreBackup(skipConfirm = false) {
   if (!_driveToken) return toast('Primero conecta Google Drive','#f59e0b');
@@ -9920,12 +9954,16 @@ async function driveSaveBackup(showToast=true) {
       if (showToast) toast('☁️ Guardado en Drive: '+now,'#10b981');
       renderDriveStatus();
     } else {
-      // Token expirado — reconectar
+      // Token expirado — intentar renovar antes de asumir que está desconectado
       const err = await res.json();
-      if (err.error?.code === 401) { _driveToken=null; renderDriveStatus(); }
+      if (err.error?.code === 401) {
+        const renewed = await driveEnsureToken();
+        if (renewed) return driveSaveBackup(showToast);
+        renderDriveStatus();
+      }
       else if (showToast) toast('⚠️ Error al guardar en Drive','#ef4444');
     }
-  } catch(e) { if (showToast) toast('⚠️ Sin conexión','#f59e0b'); }
+  } catch(e) { setTempConnIssue(true); if (showToast) toast('⚠️ Sin conexión','#f59e0b'); }
 }
 
 function updateDriveDisconnectAlert() {
@@ -9965,6 +10003,7 @@ function renderDriveStatus() {
 }
 
 function initDrive() {
+  updateOfflineBadge();
   const tok = localStorage.getItem('gpgt_drive_token');
   const fid = localStorage.getItem('gpgt_drive_file_id');
   const ref = localStorage.getItem('gpgt_drive_refresh');
