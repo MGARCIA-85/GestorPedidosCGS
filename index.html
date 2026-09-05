@@ -9741,8 +9741,8 @@ async function driveHandleRedirect() {
             <div style="font-size:15px;font-weight:700;color:#f1f5f9;margin-bottom:6px">Drive conectado</div>
             <div style="font-size:12px;color:#94a3b8;margin-bottom:18px">Se encontró un respaldo existente en Drive.<br>¿Deseas importar esos datos?</div>
             <div style="display:flex;gap:10px">
-              <button onclick="confirmDel(false)" style="flex:1;padding:10px;border-radius:9px;border:1px solid #475569;background:transparent;color:#f1f5f9;font-weight:700;cursor:pointer;font-size:13px">No, continuar vacío</button>
-              <button onclick="confirmDel(true)" style="flex:1;padding:10px;border-radius:9px;border:none;background:#10b981;color:#fff;font-weight:800;cursor:pointer;font-size:13px">📥 Importar</button>
+              <button onclick="confirmDel(false)" style="flex:1;padding:10px;border-radius:9px;border:1px solid #475569;background:transparent;color:#f1f5f9;font-weight:700;cursor:pointer;font-size:13px">No importar<br><span style="font-weight:400;font-size:11px">(Mantener datos actuales)</span></button>
+              <button onclick="confirmDel(true)" style="flex:1;padding:10px;border-radius:9px;border:none;background:#10b981;color:#fff;font-weight:800;cursor:pointer;font-size:13px">📥 Importar<br><span style="font-weight:400;font-size:11px">(Importar backup de Drive)</span></button>
             </div>`;
           modal.style.display = 'flex';
           _confirmCb = () => driveRestoreBackup(true);
@@ -9995,8 +9995,8 @@ function initDrive() {
             <div style="font-size:15px;font-weight:700;color:#f1f5f9;margin-bottom:6px">Drive conectado</div>
             <div style="font-size:12px;color:#94a3b8;margin-bottom:18px">Se encontró un respaldo existente en Drive.<br>¿Deseas importar esos datos?</div>
             <div style="display:flex;gap:10px">
-              <button onclick="confirmDel(false)" style="flex:1;padding:10px;border-radius:9px;border:1px solid #475569;background:transparent;color:#f1f5f9;font-weight:700;cursor:pointer;font-size:13px">No, continuar vacío</button>
-              <button onclick="confirmDel(true)" style="flex:1;padding:10px;border-radius:9px;border:none;background:#10b981;color:#fff;font-weight:800;cursor:pointer;font-size:13px">📥 Importar</button>
+              <button onclick="confirmDel(false)" style="flex:1;padding:10px;border-radius:9px;border:1px solid #475569;background:transparent;color:#f1f5f9;font-weight:700;cursor:pointer;font-size:13px">No importar<br><span style="font-weight:400;font-size:11px">(Mantener datos actuales)</span></button>
+              <button onclick="confirmDel(true)" style="flex:1;padding:10px;border-radius:9px;border:none;background:#10b981;color:#fff;font-weight:800;cursor:pointer;font-size:13px">📥 Importar<br><span style="font-weight:400;font-size:11px">(Importar backup de Drive)</span></button>
             </div>`;
           modal.style.display = 'flex';
           _confirmCb = () => driveRestoreBackup(true);
