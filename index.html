@@ -279,7 +279,7 @@ function fmtDDMMYYYY(d) {
 <button onclick="location.reload()" style="background:none;border:1px solid #2a3050;border-radius:8px;padding:6px 10px;color:#94a3b8;font-size:18px;cursor:pointer;flex-shrink:0" title="Actualizar">🔄</button>
 <button onclick="toggleGlobalSearch(event)" style="background:none;border:1px solid #2a3050;border-radius:8px;padding:6px 10px;color:#94a3b8;font-size:18px;cursor:pointer;flex-shrink:0" title="Buscar">🔍</button>
 <button onclick="goTab('config')" style="background:none;border:1px solid #2a3050;border-radius:8px;padding:6px 10px;color:#94a3b8;font-size:18px;cursor:pointer;flex-shrink:0" title="Configuración">⚙️</button>
-<span id="app-version-badge" style="font-size:9px;color:#475569;flex-shrink:0;align-self:center;margin-left:-4px" title="Versión de la app">v599</span>
+<span id="app-version-badge" style="font-size:9px;color:#475569;flex-shrink:0;align-self:center;margin-left:-4px" title="Versión de la app">v600</span>
 <span id="offline-badge" style="font-size:12px;flex-shrink:0;align-self:center;white-space:nowrap;color:#10b981" title="Con señal">🟢</span>
 </div>
 
@@ -660,6 +660,9 @@ Selecciona un cliente para continuar.<br><br>
     </select>
     <select id="mass-mun" class="sel" style="flex:1;min-width:100px;font-size:12px;padding:5px;margin:0">
       <option value="">🏘️ Sector...</option>
+    </select>
+    <select id="mass-priority" class="sel" style="flex:1;min-width:100px;font-size:12px;padding:5px;margin:0">
+      <option value="">⭐ Prioridad...</option>
     </select>
   </div>
   <div style="display:flex;gap:6px">
@@ -4150,6 +4153,19 @@ function getPriorityColor(name) {
   return item ? item.color : null;
 }
 
+// Paleta ampliada de colores predefinidos para elegir rápido (además del selector libre)
+const PRIORITY_COLOR_PALETTE = [
+  '#ef4444','#f97316','#f59e0b','#eab308','#84cc16','#22c55e','#10b981','#14b8a6',
+  '#06b6d4','#0ea5e9','#3b82f6','#6366f1','#8b5cf6','#a855f7','#d946ef','#ec4899',
+  '#f43f5e','#78716c','#64748b','#ffffff'
+];
+
+function priorityColorSwatches(inputId) {
+  return `<div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:8px">` +
+    PRIORITY_COLOR_PALETTE.map(c => `<button type="button" onclick="document.getElementById('${inputId}').value='${c}'" title="${c}" style="width:22px;height:22px;border-radius:50%;background:${c};border:1px solid #0006;cursor:pointer;padding:0;flex-shrink:0"></button>`).join('') +
+    `</div>`;
+}
+
 function addPriorityItem() {
   const inp = document.getElementById('new-priority-name');
   const colorInp = document.getElementById('new-priority-color');
@@ -4180,6 +4196,7 @@ function renderPriorityList() {
           <input type="color" id="edit-priority-color-${idx}" value="${color}" style="width:38px;height:34px;padding:0;border:1px solid #2a3050;border-radius:6px;background:none;cursor:pointer;flex-shrink:0"/>
           <input id="edit-priority-${idx}" value="${name.replace(/"/g,'&quot;')}" style="flex:1;background:#161929;border:1px solid #3b82f6;border-radius:6px;padding:5px 8px;color:#f1f5f9;font-size:13px;box-sizing:border-box"/>
         </div>
+        ${priorityColorSwatches('edit-priority-color-'+idx)}
         <div style="display:flex;gap:6px">
           <button onclick="confirmSavePriorityItem(${idx})" style="flex:1;background:#10b981;border:none;border-radius:6px;color:#fff;padding:6px 8px;cursor:pointer;font-size:12px">💾 Guardar</button>
           <button onclick="window._editingPriority=null;renderPriorityList()" style="background:#475569;border:none;border-radius:6px;color:#fff;padding:6px 8px;cursor:pointer;font-size:12px">✕</button>
@@ -4400,6 +4417,7 @@ function configAddFormHTML(key) {
       <input type="color" id="new-priority-color" value="#ef4444" style="width:40px;height:38px;padding:0;border:1px solid #2a3050;border-radius:6px;background:none;cursor:pointer;flex-shrink:0"/>
       <input class="inp" id="new-priority-name" placeholder="Ej: Alta, VIP, 1..." style="flex:1;margin:0"/>
     </div>
+    ${priorityColorSwatches('new-priority-color')}
     <button class="bg" style="width:100%;margin-bottom:10px" onclick="addPriorityItem()">✔ Agregar Prioridad</button>`;
   if (key === 'families') return `
     <input class="inp" id="new-family-name" placeholder="Ej: Thinner, Ácido..."/>
@@ -5546,13 +5564,15 @@ function applyMassCliEdit() {
   const rutaVal = document.getElementById('mass-ruta')?.value;
   const deptVal = document.getElementById('mass-dept')?.value;
   const munVal  = document.getElementById('mass-mun')?.value;
-  if (!rutaVal && !deptVal && !munVal) return toast('Selecciona al menos un campo a asignar','#f59e0b');
+  const prioVal = document.getElementById('mass-priority')?.value;
+  if (!rutaVal && !deptVal && !munVal && !prioVal) return toast('Selecciona al menos un campo a asignar','#f59e0b');
   sel.forEach(id => {
     const c = S.clients.find(x=>x.id===id);
     if (!c) return;
     if (rutaVal) c.rutaClienteId = Number(rutaVal);
     if (deptVal) c.deptId = Number(deptVal);
     if (munVal)  c.municipioId = Number(munVal);
+    if (prioVal) c.priority = prioVal;
   });
   const count = sel.size;
   save(); renderClients();
@@ -5804,6 +5824,11 @@ if (massDept) {
 if (massMun) {
   massMun.innerHTML = '<option value="">🏘️ Sector...</option>' +
     [...(S.municipios||[])].sort((a,b)=>a.name.localeCompare(b.name,'es')).map(m=>`<option value="${m.id}">${m.name}</option>`).join('');
+}
+const massPriority = document.getElementById('mass-priority');
+if (massPriority) {
+  massPriority.innerHTML = '<option value="">⭐ Prioridad...</option>' +
+    (S.priorityList||[]).map(p=>`<option value="${p.name}">${p.name}</option>`).join('');
 }
 
 const rfSel = document.getElementById('cli-dept-filter');
