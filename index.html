@@ -279,7 +279,7 @@ function fmtDDMMYYYY(d) {
 <button onclick="location.reload()" style="background:none;border:1px solid #2a3050;border-radius:8px;padding:6px 10px;color:#94a3b8;font-size:18px;cursor:pointer;flex-shrink:0" title="Actualizar">🔄</button>
 <button onclick="toggleGlobalSearch(event)" style="background:none;border:1px solid #2a3050;border-radius:8px;padding:6px 10px;color:#94a3b8;font-size:18px;cursor:pointer;flex-shrink:0" title="Buscar">🔍</button>
 <button onclick="goTab('config')" style="background:none;border:1px solid #2a3050;border-radius:8px;padding:6px 10px;color:#94a3b8;font-size:18px;cursor:pointer;flex-shrink:0" title="Configuración">⚙️</button>
-<span id="app-version-badge" style="font-size:9px;color:#475569;flex-shrink:0;align-self:center;margin-left:-4px" title="Versión de la app">v596</span>
+<span id="app-version-badge" style="font-size:9px;color:#475569;flex-shrink:0;align-self:center;margin-left:-4px" title="Versión de la app">v597</span>
 <span id="offline-badge" style="font-size:12px;flex-shrink:0;align-self:center;white-space:nowrap;color:#10b981" title="Con señal">🟢</span>
 </div>
 
@@ -9606,6 +9606,62 @@ XLSX.writeFile(wb, `clientes_${new Date().toISOString().slice(0,10)}.xlsx`);
 toast('📇 Excel de clientes descargado');
 }
 
+// Busca el id de una ruta/departamento/sector por su nombre (coincidencia exacta, sin mayúsculas/espacios)
+function findEntityIdByName(list, name) {
+  const n = (name||'').toString().trim().toLowerCase();
+  if (!n) return null;
+  const found = (list||[]).find(x => (x.name||'').toString().trim().toLowerCase() === n);
+  return found ? found.id : null;
+}
+
+function applyImportFieldsToClient(c, row, nombre) {
+  if (row['ID Cliente'] !== undefined && row['ID Cliente'] !== '') c.clientCode = row['ID Cliente'].toString().trim();
+  if (row['Prioridad']  !== undefined && row['Prioridad']  !== '') c.priority   = row['Prioridad'].toString().trim();
+  if (row['Contacto']   !== undefined && row['Contacto']   !== '') c.contact    = row['Contacto'].toString().trim();
+  if (row['Teléfono']   !== undefined && row['Teléfono']   !== '') c.phone      = row['Teléfono'].toString().trim();
+  if (row['Dirección']  !== undefined && row['Dirección']  !== '') c.address    = row['Dirección'].toString().trim();
+  if (row['Departamento'] !== undefined && row['Departamento'] !== '') {
+    const did = findEntityIdByName(S.depts, row['Departamento']);
+    if (did !== null) c.deptId = did;
+  }
+  if (row['Sector'] !== undefined && row['Sector'] !== '') {
+    const mid = findEntityIdByName(S.municipios, row['Sector']);
+    if (mid !== null) c.municipioId = mid;
+  }
+  if (row['Ruta'] !== undefined && row['Ruta'] !== '') {
+    const rid = findEntityIdByName(S.rutasCliente, row['Ruta']);
+    if (rid !== null) c.rutaClienteId = rid;
+  }
+  // Actualizar el nombre guardado en pedidos existentes si el nombre cambió en el archivo
+  if (nombre && nombre !== c.name) {
+    c.name = nombre;
+    S.orders.forEach(o => { if (Number(o.clientId) === c.id) o.clientName = c.name; });
+  }
+}
+
+function createClientFromImportRow(row, nombre) {
+  const id = genId();
+  const tipo = (row['Tipo']||'').toString().trim().toLowerCase();
+  const isProspect = tipo === 'prospecto';
+  const newClient = {
+    id,
+    name: nombre,
+    clientCode:  (row['ID Cliente']||'').toString().trim(),
+    priority:    (row['Prioridad']||'').toString().trim(),
+    contact:     (row['Contacto']||'').toString().trim(),
+    phone:       (row['Teléfono']||'').toString().trim(),
+    address:     (row['Dirección']||'').toString().trim(),
+    deptId:        findEntityIdByName(S.depts, row['Departamento']),
+    municipioId:   findEntityIdByName(S.municipios, row['Sector']),
+    rutaClienteId: findEntityIdByName(S.rutasCliente, row['Ruta'])
+  };
+  if (isProspect) { newClient.isProspect = true; newClient.excludeFromAutoRoute = true; }
+  S.clients.push(newClient);
+  const init = {}; S.products.forEach(p => { init[p.id] = p.basePrice; });
+  S.cp[id] = init;
+  return newClient;
+}
+
 function importClientsExcel(e) {
 const file = e.target.files[0]; if (!file) return;
 const status = document.getElementById('import-clients-status');
@@ -9615,31 +9671,39 @@ reader.onload = function(ev) {
     const wb = XLSX.read(new Uint8Array(ev.target.result), {type:'array'});
     const ws = wb.Sheets[wb.SheetNames[0]];
     const rows = XLSX.utils.sheet_to_json(ws, {defval:''});
-    let actualizados = 0, noEncontrados = 0;
+    let actualizados = 0, noEncontrados = 0, creados = 0;
     rows.forEach(row => {
       const sysIdRaw = (row['ID Sistema']||'').toString().trim().replace(/^GP-0*/i, '');
       const sysId = sysIdRaw !== '' ? Number(sysIdRaw) : null;
+      const hasSysId = sysId !== null && !isNaN(sysId);
       const nombre = (row['Nombre']||'').toString().trim();
       let c = null;
-      if (sysId !== null && !isNaN(sysId)) c = S.clients.find(x => x.id === sysId);
-      if (!c && nombre) c = S.clients.find(x => x.name.toLowerCase() === nombre.toLowerCase());
-      if (!c) { noEncontrados++; return; }
-      if (row['ID Cliente'] !== undefined && row['ID Cliente'] !== '') c.clientCode = row['ID Cliente'].toString().trim();
-      if (row['Prioridad']  !== undefined && row['Prioridad']  !== '') c.priority   = row['Prioridad'].toString().trim();
-      if (row['Contacto']   !== undefined && row['Contacto']   !== '') c.contact    = row['Contacto'].toString().trim();
-      if (row['Teléfono']   !== undefined && row['Teléfono']   !== '') c.phone      = row['Teléfono'].toString().trim();
-      if (row['Dirección']  !== undefined && row['Dirección']  !== '') c.address    = row['Dirección'].toString().trim();
-      // Actualizar el nombre guardado en pedidos existentes si el nombre cambió en el archivo
-      if (nombre && nombre !== c.name) {
-        c.name = nombre;
-        S.orders.forEach(o => { if (Number(o.clientId) === c.id) o.clientName = c.name; });
+      if (hasSysId) {
+        // Si trae ID Sistema pero no coincide con ningún cliente, NO se crea nada — se reporta como no encontrado
+        c = S.clients.find(x => x.id === sysId);
+        if (!c) { noEncontrados++; return; }
+      } else {
+        // Sin ID Sistema: buscar por nombre entre los existentes
+        if (nombre) c = S.clients.find(x => x.name.toLowerCase() === nombre.toLowerCase());
+        if (!c) {
+          if (!nombre) { noEncontrados++; return; } // sin nombre no se puede crear nada
+          createClientFromImportRow(row, nombre);
+          creados++;
+          return;
+        }
       }
+      applyImportFieldsToClient(c, row, nombre);
       actualizados++;
     });
     save();
     renderClients(); renderProspects();
-    status.textContent = `✅ ${actualizados} cliente(s) actualizado(s)` + (noEncontrados ? `, ${noEncontrados} no encontrado(s)` : '');
-    toast(`✅ ${actualizados} cliente(s) actualizado(s)`);
+    const parts = [];
+    if (creados) parts.push(`${creados} cliente(s) nuevo(s) creado(s)`);
+    if (actualizados) parts.push(`${actualizados} actualizado(s)`);
+    if (noEncontrados) parts.push(`${noEncontrados} no encontrado(s)`);
+    const msg = '✅ ' + (parts.length ? parts.join(', ') : 'Nada que importar');
+    status.textContent = msg;
+    toast(msg);
   } catch(err) {
     console.error(err);
     status.textContent = '❌ Error al leer el archivo. Verifica que sea el Excel exportado por la app.';
