@@ -279,7 +279,7 @@ function fmtDDMMYYYY(d) {
 <button onclick="location.reload()" style="background:none;border:1px solid #2a3050;border-radius:8px;padding:6px 10px;color:#94a3b8;font-size:18px;cursor:pointer;flex-shrink:0" title="Actualizar">🔄</button>
 <button onclick="toggleGlobalSearch(event)" style="background:none;border:1px solid #2a3050;border-radius:8px;padding:6px 10px;color:#94a3b8;font-size:18px;cursor:pointer;flex-shrink:0" title="Buscar">🔍</button>
 <button onclick="goTab('config')" style="background:none;border:1px solid #2a3050;border-radius:8px;padding:6px 10px;color:#94a3b8;font-size:18px;cursor:pointer;flex-shrink:0" title="Configuración">⚙️</button>
-<span id="app-version-badge" style="font-size:9px;color:#475569;flex-shrink:0;align-self:center;margin-left:-4px" title="Versión de la app">v598</span>
+<span id="app-version-badge" style="font-size:9px;color:#475569;flex-shrink:0;align-self:center;margin-left:-4px" title="Versión de la app">v599</span>
 <span id="offline-badge" style="font-size:12px;flex-shrink:0;align-self:center;white-space:nowrap;color:#10b981" title="Con señal">🟢</span>
 </div>
 
@@ -1115,6 +1115,11 @@ if (!S.familyList) {
 if (!S.priorityList) {
   S.priorityList = [...new Set((S.clients||[]).map(c=>(c.priority||'').trim()).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'es'));
 }
+// Migrar priorityList de lista de textos a lista de objetos {name, color}, para poder asignar un color a cada prioridad
+if (S.priorityList.length && typeof S.priorityList[0] === 'string') {
+  const defaultPalette = ['#ef4444','#f59e0b','#10b981','#3b82f6','#a855f7','#ec4899','#14b8a6','#84cc16'];
+  S.priorityList = S.priorityList.map((name, i) => ({ name, color: defaultPalette[i % defaultPalette.length] }));
+}
 // Migrar rutaId (uno solo) / deptId (uno solo) a rutaIds / deptIds (listas), permitiendo múltiples padres
 (S.depts||[]).forEach(d => {
   if (!d.rutaIds) {
@@ -1435,7 +1440,7 @@ function renderProspects() {
   ${(window._cliSel||new Set()).has(c.id)?'checked':''}
   onclick="event.stopPropagation();toggleCliSel(${c.id},this.checked)"/>
 <div>
-<div style="font-weight:800;font-size:15px">${c.name}</div>
+<div style="font-weight:800;font-size:15px;color:${getPriorityColor(c.priority) || '#f1f5f9'}">${c.name}</div>
 ${c.clientCode ? `<div style="font-size:12px;color:#64748b">🆔 ${c.clientCode}</div>` : ''}
 ${c.priority ? `<div style="font-size:12px;color:#f59e0b">⭐ ${c.priority}</div>` : ''}
 ${c.phone   ? `<div style="font-size:12px;color:#64748b">📞 ${c.phone}</div>` : ''}
@@ -1646,7 +1651,7 @@ function acCliInput() {
   matches.forEach(c => {
     const d = document.createElement('div');
     d.className = 'ac-opt';
-    d.innerHTML = c.name + (c.isProspect ? ' <small style="color:#f59e0b">(Prospecto)</small>' : '') + (c.phone ? '<small>📞 '+c.phone+'</small>' : '');
+    d.innerHTML = `<span style="color:${getPriorityColor(c.priority) || 'inherit'}">${c.name}</span>` + (c.isProspect ? ' <small style="color:#f59e0b">(Prospecto)</small>' : '') + (c.phone ? '<small>📞 '+c.phone+'</small>' : '');
     d.onmousedown = () => {
       document.getElementById('ord-cli').value = c.id;
       txt.value = c.name;
@@ -4137,13 +4142,22 @@ function addDept() {
   toast('🏛️ Departamento agregado');
 }
 
+// Devuelve el color configurado para una prioridad por nombre, o un gris neutro si no tiene o no existe
+function getPriorityColor(name) {
+  const n = (name||'').trim();
+  if (!n) return null;
+  const item = (S.priorityList||[]).find(p => p.name === n);
+  return item ? item.color : null;
+}
+
 function addPriorityItem() {
   const inp = document.getElementById('new-priority-name');
+  const colorInp = document.getElementById('new-priority-color');
   const name = inp.value.trim();
   if (!name) { toast('Escribe el nombre de la prioridad', '#ef4444'); return; }
   if (!S.priorityList) S.priorityList = [];
-  if (S.priorityList.some(p => p.toLowerCase() === name.toLowerCase())) { toast('Esa prioridad ya existe', '#f59e0b'); return; }
-  S.priorityList.push(name);
+  if (S.priorityList.some(p => p.name.toLowerCase() === name.toLowerCase())) { toast('Esa prioridad ya existe', '#f59e0b'); return; }
+  S.priorityList.push({ name, color: (colorInp && colorInp.value) || '#ef4444' });
   inp.value = '';
   window._configAddOpen = null;
   save(); renderConfigLists();
@@ -4155,12 +4169,17 @@ function renderPriorityList() {
   if (!wrap) return;
   const list = S.priorityList || [];
   if (!list.length) { wrap.innerHTML = '<div style="font-size:12px;color:#64748b;padding:4px 0">Sin prioridades. Agrega una arriba.</div>'; return; }
-  wrap.innerHTML = list.map((name, idx) => {
+  wrap.innerHTML = list.map((item, idx) => {
+    const name = item.name;
+    const color = item.color || '#ef4444';
     const count = S.clients.filter(c => c.priority === name).length;
     const isEditing = window._editingPriority === idx;
     if (isEditing) {
       return `<div style="padding:6px 0;border-bottom:1px solid #1e2640">
-        <input id="edit-priority-${idx}" value="${name.replace(/"/g,'&quot;')}" style="width:100%;background:#161929;border:1px solid #3b82f6;border-radius:6px;padding:5px 8px;color:#f1f5f9;font-size:13px;margin-bottom:6px;box-sizing:border-box"/>
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:6px">
+          <input type="color" id="edit-priority-color-${idx}" value="${color}" style="width:38px;height:34px;padding:0;border:1px solid #2a3050;border-radius:6px;background:none;cursor:pointer;flex-shrink:0"/>
+          <input id="edit-priority-${idx}" value="${name.replace(/"/g,'&quot;')}" style="flex:1;background:#161929;border:1px solid #3b82f6;border-radius:6px;padding:5px 8px;color:#f1f5f9;font-size:13px;box-sizing:border-box"/>
+        </div>
         <div style="display:flex;gap:6px">
           <button onclick="confirmSavePriorityItem(${idx})" style="flex:1;background:#10b981;border:none;border-radius:6px;color:#fff;padding:6px 8px;cursor:pointer;font-size:12px">💾 Guardar</button>
           <button onclick="window._editingPriority=null;renderPriorityList()" style="background:#475569;border:none;border-radius:6px;color:#fff;padding:6px 8px;cursor:pointer;font-size:12px">✕</button>
@@ -4172,8 +4191,9 @@ function renderPriorityList() {
         <button onclick="movePriorityItem(${idx},-1)" ${idx===0?'disabled':''} style="background:none;border:none;color:${idx===0?'#334155':'#94a3b8'};cursor:${idx===0?'default':'pointer'};font-size:12px;padding:0 4px;line-height:1">▲</button>
         <button onclick="movePriorityItem(${idx},1)" ${idx===list.length-1?'disabled':''} style="background:none;border:none;color:${idx===list.length-1?'#334155':'#94a3b8'};cursor:${idx===list.length-1?'default':'pointer'};font-size:12px;padding:0 4px;line-height:1">▼</button>
       </div>
+      <span style="width:16px;height:16px;border-radius:50%;background:${color};flex-shrink:0;border:1px solid #0006"></span>
       <button onclick="window._editingPriority=${idx};renderPriorityList()" style="background:none;border:none;color:#f59e0b;cursor:pointer;font-size:14px;padding:2px 4px">✏️</button>
-      <span style="flex:1;font-size:13px;color:#f1f5f9">⭐ ${name} <span style="color:#64748b;font-size:11px">(${count} cliente${count!==1?'s':''})</span></span>
+      <span style="flex:1;font-size:13px;color:${color}">⭐ ${name} <span style="color:#64748b;font-size:11px">(${count} cliente${count!==1?'s':''})</span></span>
       <button class="br" style="font-size:10px;padding:2px 8px" onclick="deletePriorityItem(${idx})">✕</button>
     </div>`;
   }).join('');
@@ -4196,11 +4216,12 @@ function confirmSavePriorityItem(idx) {
 
 function savePriorityItem(idx) {
   const inp = document.getElementById('edit-priority-'+idx);
+  const colorInp = document.getElementById('edit-priority-color-'+idx);
   const newName = inp ? inp.value.trim() : '';
   if (!newName) return toast('El nombre no puede estar vacío','#ef4444');
-  const oldName = S.priorityList[idx];
-  if (S.priorityList.some((p,i) => i!==idx && p.toLowerCase()===newName.toLowerCase())) return toast('Esa prioridad ya existe','#f59e0b');
-  S.priorityList[idx] = newName;
+  const oldName = S.priorityList[idx].name;
+  if (S.priorityList.some((p,i) => i!==idx && p.name.toLowerCase()===newName.toLowerCase())) return toast('Esa prioridad ya existe','#f59e0b');
+  S.priorityList[idx] = { name: newName, color: (colorInp && colorInp.value) || S.priorityList[idx].color };
   S.clients.forEach(c => { if (c.priority === oldName) c.priority = newName; });
   window._editingPriority = null;
   save(); renderConfigLists(); renderClientsIfActive();
@@ -4208,7 +4229,8 @@ function savePriorityItem(idx) {
 }
 
 function deletePriorityItem(idx) {
-  const name = (S.priorityList||[])[idx];
+  const item = (S.priorityList||[])[idx];
+  const name = item ? item.name : null;
   if (!name) return;
   const count = S.clients.filter(c => c.priority === name).length;
   const msg = count ? `Esto quitará la prioridad "${name}" de ${count} cliente(s). ¿Continuar?` : `¿Eliminar "${name}"?`;
@@ -4374,7 +4396,10 @@ function configAddFormHTML(key) {
     <div style="font-size:11px;color:#64748b;margin-bottom:8px">El departamento se asigna después, desde la lista de Departamentos.</div>
     <button class="bg" style="width:100%;margin-bottom:10px" onclick="addMun()">✔ Agregar Sector</button>`;
   if (key === 'priority') return `
-    <input class="inp" id="new-priority-name" placeholder="Ej: Alta, VIP, 1..."/>
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+      <input type="color" id="new-priority-color" value="#ef4444" style="width:40px;height:38px;padding:0;border:1px solid #2a3050;border-radius:6px;background:none;cursor:pointer;flex-shrink:0"/>
+      <input class="inp" id="new-priority-name" placeholder="Ej: Alta, VIP, 1..." style="flex:1;margin:0"/>
+    </div>
     <button class="bg" style="width:100%;margin-bottom:10px" onclick="addPriorityItem()">✔ Agregar Prioridad</button>`;
   if (key === 'families') return `
     <input class="inp" id="new-family-name" placeholder="Ej: Thinner, Ácido..."/>
@@ -5322,8 +5347,8 @@ if (mode==='recent')   S.clients.reverse();
 if (mode==='priority') S.clients.sort((a,b) => {
   const pa = (a.priority||'').trim(), pb = (b.priority||'').trim();
   const list = S.priorityList || [];
-  const ia = pa ? list.indexOf(pa) : -1;
-  const ib = pb ? list.indexOf(pb) : -1;
+  const ia = pa ? list.findIndex(p => p.name === pa) : -1;
+  const ib = pb ? list.findIndex(p => p.name === pb) : -1;
   // Usa la posición configurada en la lista de prioridades (Configuración);
   // sin prioridad o una que ya no está en la lista se manda al final.
   const oa = ia === -1 ? Infinity : ia;
@@ -5711,7 +5736,7 @@ function renderClients() {
   const ncPrioSel = document.getElementById('nc-priority');
   if (ncPrioSel) {
     const curVal = ncPrioSel.value;
-    ncPrioSel.innerHTML = '<option value="">— Sin prioridad —</option>' + (S.priorityList||[]).map(p=>`<option value="${p}">${p}</option>`).join('');
+    ncPrioSel.innerHTML = '<option value="">— Sin prioridad —</option>' + (S.priorityList||[]).map(p=>`<option value="${p.name}">${p.name}</option>`).join('');
     ncPrioSel.value = curVal;
   }
   _renderClientsInternal();
@@ -5851,7 +5876,7 @@ card.innerHTML = `
   onclick="event.stopPropagation();toggleCliSel(${c.id},this.checked)"/>
 ${dh}
 <div>
-<div style="font-weight:800;font-size:15px">${c.name}</div>
+<div style="font-weight:800;font-size:15px;color:${getPriorityColor(c.priority) || '#f1f5f9'}">${c.name}</div>
 ${c.clientCode ? `<div style="font-size:12px;color:#64748b">🆔 ${c.clientCode}</div>` : ''}
 ${c.priority ? `<div style="font-size:12px;color:#f59e0b">⭐ ${c.priority}</div>` : ''}
 ${c.phone   ? `<div style="font-size:12px;color:#64748b">📞 ${c.phone}</div>` : ''}
@@ -6337,6 +6362,7 @@ function plSearchClients(id) {
     const d = document.createElement('div');
     d.className = 'ac-opt';
     d.textContent = c.name;
+    d.style.color = getPriorityColor(c.priority) || '';
     d.onmousedown = () => {
       _plEditState.clientIds.push(c.id);
       txt.value = '';
@@ -6730,6 +6756,7 @@ function brSearchExtraClients() {
     const d = document.createElement('div');
     d.className = 'ac-opt';
     d.textContent = c.name;
+    d.style.color = getPriorityColor(c.priority) || '';
     d.onmousedown = () => {
       _brExtraClients.push(c.id);
       txt.value = '';
@@ -8725,7 +8752,7 @@ const curMun  = (S.municipios||[]).find(m=>m.id===c.municipioId);
 document.getElementById("cc-"+id).innerHTML =
 '<label class="lbl">Nombre</label><input class="inp" id="ecn-'+id+'" value="'+c.name+'"/>' +
 '<label class="lbl">ID Cliente</label><input class="inp" id="eccid-'+id+'" value="'+(c.clientCode||'')+'" placeholder="Código de identificación"/>' +
-'<label class="lbl">⭐ Prioridad</label><select class="sel" id="ecpriority-'+id+'" style="width:100%;margin-bottom:12px"><option value="">— Sin prioridad —</option>'+(S.priorityList||[]).map(p=>'<option value="'+p+'" '+(c.priority===p?'selected':'')+'>'+p+'</option>').join('')+'</select>' +
+'<label class="lbl">⭐ Prioridad</label><select class="sel" id="ecpriority-'+id+'" style="width:100%;margin-bottom:12px"><option value="">— Sin prioridad —</option>'+(S.priorityList||[]).map(p=>'<option value="'+p.name+'" '+(c.priority===p.name?'selected':'')+'>'+p.name+'</option>').join('')+'</select>' +
 '<div id="restprod-wrap-'+id+'">' + buildRestrictedProdChecklist(c) + '</div>' +
 '<label class="lbl">Contacto</label><input class="inp" id="eccontact-'+id+'" value="'+(c.contact||'')+'" placeholder="Nombre de la persona de contacto"/>' +
 '<label class="lbl">Teléfono</label><input class="inp" id="ecp-'+id+'" value="'+(c.phone||"")+'" />' +
@@ -9144,6 +9171,7 @@ function linkSearchClients(cid) {
     const d = document.createElement('div');
     d.className = 'ac-opt';
     d.textContent = c.name;
+    d.style.color = getPriorityColor(c.priority) || '';
     d.onmousedown = () => {
       _linkExtraClients.push(c.id);
       txt.value = '';
@@ -11781,7 +11809,7 @@ function runGlobalSearch() {
     html += `<div style="padding:5px 12px;font-size:10px;color:#64748b;font-weight:700;text-transform:uppercase;background:#161929;letter-spacing:.5px">👥 Clientes</div>`;
     html += clis.slice(0,6).map(x =>
       `<div class="gs-opt" onclick="gsGoClient(${x.id})">
-        <div style="font-weight:700;color:#f1f5f9">${hl(x.name)}</div>
+        <div style="font-weight:700;color:${getPriorityColor(x.priority) || '#f1f5f9'}">${hl(x.name)}</div>
         ${x.phone?`<div style="font-size:11px;color:#64748b">📞 ${hl(x.phone)}</div>`:''}
       </div>`).join('');
   }
@@ -11832,7 +11860,7 @@ function runGlobalSearch() {
       const bonusHtml = (x.bonusLines&&x.bonusLines.length)?`<div style="margin-top:4px"><div style="font-size:10px;color:#10b981;font-weight:700">🎁 BONIFICACIÓN</div>${x.bonusLines.map(bl=>{const p=S.products.find(pp=>pp.id===Number(bl.productId));const spec=p?.presentation?` (${p.presentation})`:'';const _ivaTagG=x.applyIva?' <span style="font-size:9px;color:#60a5fa">+IVA</span>':'';return `<div style="font-size:11px;color:#f1f5f9">${bl.qty} ${p?p.name:'—'}${spec} × ${Q(bl.price||0)}/${p?.unitLabel||'u'}${_ivaTagG}</div>`;}).join('')}</div>`:'';
       return `<div class="gs-opt" onclick="gsGoOrder(${x.id})">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">
-          <span style="font-weight:700;color:#f1f5f9;font-size:13px">${hl(x.clientName)}</span>
+          <span style="font-weight:700;color:${(()=>{const cc=S.clients.find(cl=>cl.id===x.clientId);return cc?(getPriorityColor(cc.priority)||'#f1f5f9'):'#f1f5f9';})()};font-size:13px">${hl(x.clientName)}</span>
           <div style="display:flex;align-items:center;gap:4px">
             ${route?`<span style="font-size:10px;color:#f59e0b;font-weight:700">(RUTA)</span>`:''}
             <span style="font-size:10px;color:${sc};font-weight:700;border:1px solid ${sc};padding:0 5px;border-radius:8px">${x.status}</span>
