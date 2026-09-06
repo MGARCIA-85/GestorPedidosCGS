@@ -279,7 +279,7 @@ function fmtDDMMYYYY(d) {
 <button onclick="location.reload()" style="background:none;border:1px solid #2a3050;border-radius:8px;padding:6px 10px;color:#94a3b8;font-size:18px;cursor:pointer;flex-shrink:0" title="Actualizar">🔄</button>
 <button onclick="toggleGlobalSearch(event)" style="background:none;border:1px solid #2a3050;border-radius:8px;padding:6px 10px;color:#94a3b8;font-size:18px;cursor:pointer;flex-shrink:0" title="Buscar">🔍</button>
 <button onclick="goTab('config')" style="background:none;border:1px solid #2a3050;border-radius:8px;padding:6px 10px;color:#94a3b8;font-size:18px;cursor:pointer;flex-shrink:0" title="Configuración">⚙️</button>
-<span id="app-version-badge" style="font-size:9px;color:#475569;flex-shrink:0;align-self:center;margin-left:-4px" title="Versión de la app">v594</span>
+<span id="app-version-badge" style="font-size:9px;color:#475569;flex-shrink:0;align-self:center;margin-left:-4px" title="Versión de la app">v595</span>
 <span id="offline-badge" style="font-size:12px;flex-shrink:0;align-self:center;white-space:nowrap;color:#10b981" title="Con señal">🟢</span>
 </div>
 
@@ -9835,15 +9835,105 @@ function updateOfflineBadge() {
 }
 
 // Al recuperar conexión (o volver de segundo plano), reintenta silenciosamente y refresca el estado real de Drive
+let _syncCheckInProgress = false;
+
 async function recheckDriveOnResume() {
   updateOfflineBadge();
   if (!navigator.onLine) return;
   const hasRefresh = _driveRefreshToken || localStorage.getItem('gpgt_drive_refresh');
   if (hasRefresh) {
     setTempConnIssue(false);
-    await driveEnsureToken();
+    const ok = await driveEnsureToken();
+    if (ok) await checkRemoteSyncStatus();
   }
   renderDriveStatus();
+}
+
+// Revisa si el respaldo en Drive cambió desde la última vez que este dispositivo se sincronizó,
+// y si este dispositivo tiene cambios propios sin subir — para decidir qué aviso mostrar (si alguno).
+async function checkRemoteSyncStatus() {
+  const lastSyncedSnap = localStorage.getItem('gpgt_last_synced_snapshot');
+  if (!lastSyncedSnap) return; // primera conexión — ya la maneja el flujo inicial de conectar Drive
+  if (_syncCheckInProgress) return;
+  if (document.getElementById('confirm-modal')?.style.display === 'flex') return; // ya hay un modal abierto
+  _syncCheckInProgress = true;
+  try {
+    const meta = await driveGetRemoteMeta();
+    if (!meta) return;
+    const lastSyncedTime = localStorage.getItem('gpgt_last_synced_time');
+    const remoteChanged = !lastSyncedTime || meta.modifiedTime !== lastSyncedTime;
+    if (!remoteChanged) return; // nada nuevo en Drive
+    if (hasUnsyncedLocalChanges()) {
+      showSyncConflictModal(meta);
+    } else {
+      showSyncSimpleUpdateModal(meta);
+    }
+  } finally {
+    _syncCheckInProgress = false;
+  }
+}
+
+// Caso simple: Drive tiene algo nuevo y este dispositivo no tiene cambios propios pendientes
+function showSyncSimpleUpdateModal(meta) {
+  const modal = document.getElementById('confirm-modal');
+  const inner = modal.querySelector('div');
+  inner.innerHTML = `
+    <div style="font-size:28px;margin-bottom:8px">☁️🔄</div>
+    <div style="font-size:15px;font-weight:700;color:#f1f5f9;margin-bottom:6px">Hay datos más recientes en Drive</div>
+    <div style="font-size:12px;color:#94a3b8;margin-bottom:18px">Otro dispositivo actualizó la información. Impórtala para seguir trabajando con lo más reciente.</div>
+    <div style="display:flex;gap:10px">
+      <button onclick="document.getElementById('confirm-modal').style.display='none'" style="flex:1;padding:10px;border-radius:9px;border:1px solid #475569;background:transparent;color:#f1f5f9;font-weight:700;cursor:pointer;font-size:13px">Más tarde</button>
+      <button onclick="syncSimpleImport('${meta.id}')" style="flex:1;padding:10px;border-radius:9px;border:none;background:#10b981;color:#fff;font-weight:800;cursor:pointer;font-size:13px">📥 Importar ahora</button>
+    </div>`;
+  modal.style.display = 'flex';
+}
+
+async function syncSimpleImport(fileId) {
+  document.getElementById('confirm-modal').style.display = 'none';
+  toast('⏳ Importando datos de Drive...', '#f59e0b');
+  const data = await driveFetchRemoteContent(fileId);
+  if (!data || !data.clients) { toast('⚠️ No se pudo importar el respaldo', '#ef4444'); return; }
+  const meta = await driveGetRemoteMeta();
+  localStorage.setItem(LS, JSON.stringify(data));
+  markSynced(data, meta ? meta.modifiedTime : null);
+  toast('✅ Datos actualizados. Recargando...', '#10b981');
+  setTimeout(() => window.location.reload(), 1200);
+}
+
+// Caso de conflicto real: Drive cambió Y este dispositivo también tiene cambios sin subir
+function showSyncConflictModal(meta) {
+  const modal = document.getElementById('confirm-modal');
+  const inner = modal.querySelector('div');
+  inner.innerHTML = `
+    <div style="font-size:28px;margin-bottom:8px">⚠️☁️</div>
+    <div style="font-size:15px;font-weight:700;color:#f1f5f9;margin-bottom:6px">Cambios en dos dispositivos a la vez</div>
+    <div style="font-size:12px;color:#94a3b8;margin-bottom:18px">Este dispositivo tiene cambios sin subir, y otro dispositivo también actualizó datos mientras tanto.</div>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <button onclick="syncResolveConflict('merge','${meta.id}')" style="padding:10px;border-radius:9px;border:none;background:#10b981;color:#fff;font-weight:800;cursor:pointer;font-size:13px">🔀 Combinar<br><span style="font-weight:400;font-size:11px">(Recomendado: junta ambos cambios)</span></button>
+      <button onclick="syncResolveConflict('overwrite','${meta.id}')" style="padding:10px;border-radius:9px;border:1px solid #ef4444;background:transparent;color:#fca5a5;font-weight:700;cursor:pointer;font-size:13px">Guardar de todos modos<br><span style="font-weight:400;font-size:11px">(Reemplaza lo de Drive con lo de este dispositivo)</span></button>
+      <button onclick="document.getElementById('confirm-modal').style.display='none'" style="padding:10px;border-radius:9px;border:1px solid #475569;background:transparent;color:#f1f5f9;font-weight:700;cursor:pointer;font-size:13px">Cancelar</button>
+    </div>`;
+  modal.style.display = 'flex';
+}
+
+async function syncResolveConflict(action, fileId) {
+  document.getElementById('confirm-modal').style.display = 'none';
+  if (action === 'overwrite') {
+    toast('☁️ Guardando tus datos en Drive...', '#f59e0b');
+    await driveSaveBackup(true);
+    return;
+  }
+  // Combinar
+  toast('⏳ Combinando datos de ambos dispositivos...', '#f59e0b');
+  const remoteData = await driveFetchRemoteContent(fileId);
+  if (!remoteData || !remoteData.clients) { toast('⚠️ No se pudo descargar el respaldo remoto para combinar', '#ef4444'); return; }
+  const { anyClash } = await driveMergeAndSave(remoteData);
+  renderOrderPage(); renderBackup();
+  if (anyClash) {
+    toast('✅ Combinado. Algunos registros se editaron en ambos lados — se conservó la versión de este dispositivo en esos casos.', '#f59e0b');
+  } else {
+    toast('✅ Datos combinados correctamente. Nada se perdió.', '#10b981');
+  }
 }
 
 window.addEventListener('online', () => { setTempConnIssue(false); recheckDriveOnResume(); });
@@ -9868,7 +9958,8 @@ async function driveRestoreBackup(skipConfirm = false) {
       }
       const found = await search.json();
       if (!found.files || !found.files.length) return toast('⚠️ No se encontró respaldo en Drive','#ef4444');
-      const fid = found.files[0].id;
+      const fInfo = found.files[0];
+      const fid = fInfo.id;
       _driveFileId = fid;
       localStorage.setItem('gpgt_drive_file_id', fid);
       toast('⏳ Descargando datos...','#f59e0b');
@@ -9880,6 +9971,7 @@ async function driveRestoreBackup(skipConfirm = false) {
       const data = await res.json();
       if (!data || !data.clients) return toast('⚠️ El archivo de Drive no tiene datos válidos','#ef4444');
       localStorage.setItem(LS, JSON.stringify(data));
+      markSynced(data, fInfo.modifiedTime);
       toast('✅ Datos importados. Recargando...','#10b981');
       setTimeout(() => window.location.reload(), 1500);
     } catch(e) { toast('⚠️ Error: '+e.message,'#ef4444'); }
@@ -9922,7 +10014,7 @@ async function driveSaveBackup(showToast=true) {
     const fileId = _driveFileId || localStorage.getItem('gpgt_drive_file_id');
     let url, method;
     if (fileId) {
-      url    = `https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media`;
+      url    = `https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media&fields=id,modifiedTime`;
       method = 'PATCH';
     } else {
       // Buscar si ya existe
@@ -9934,7 +10026,7 @@ async function driveSaveBackup(showToast=true) {
       if (found.files && found.files.length) {
         _driveFileId = found.files[0].id;
         localStorage.setItem('gpgt_drive_file_id', _driveFileId);
-        url    = `https://www.googleapis.com/upload/drive/v3/files/${_driveFileId}?uploadType=media`;
+        url    = `https://www.googleapis.com/upload/drive/v3/files/${_driveFileId}?uploadType=media&fields=id,modifiedTime`;
         method = 'PATCH';
       } else {
         // Crear nuevo
@@ -9946,7 +10038,7 @@ async function driveSaveBackup(showToast=true) {
         const mj = await meta.json();
         _driveFileId = mj.id;
         localStorage.setItem('gpgt_drive_file_id', _driveFileId);
-        url    = `https://www.googleapis.com/upload/drive/v3/files/${_driveFileId}?uploadType=media`;
+        url    = `https://www.googleapis.com/upload/drive/v3/files/${_driveFileId}?uploadType=media&fields=id,modifiedTime`;
         method = 'PATCH';
       }
     }
@@ -9955,8 +10047,11 @@ async function driveSaveBackup(showToast=true) {
       body: data
     });
     if (res.ok) {
+      const rj = await res.json();
       const now = nowDateTimeStr();
-      S.lastDriveBk = now; save();
+      S.lastDriveBk = now;
+      try { localStorage.setItem(LS, JSON.stringify(S)); } catch(e) {}
+      markSynced(S, rj.modifiedTime);
       if (showToast) toast('☁️ Guardado en Drive: '+now,'#10b981');
       renderDriveStatus();
     } else {
@@ -9970,6 +10065,143 @@ async function driveSaveBackup(showToast=true) {
       else if (showToast) toast('⚠️ Error al guardar en Drive','#ef4444');
     }
   } catch(e) { setTempConnIssue(true); if (showToast) toast('⚠️ Sin conexión','#f59e0b'); }
+}
+
+// ═══════════════════════════════════════════════════════
+//  SINCRONIZACIÓN MULTI-DISPOSITIVO
+// ═══════════════════════════════════════════════════════
+
+// Guarda el "punto de referencia": cómo quedaron los datos la última vez que este
+// dispositivo estuvo sincronizado con Drive (para poder comparar más adelante).
+function markSynced(dataObj, remoteTime) {
+  try {
+    localStorage.setItem('gpgt_last_synced_snapshot', JSON.stringify(dataObj));
+    if (remoteTime) localStorage.setItem('gpgt_last_synced_time', remoteTime);
+  } catch(e) {}
+}
+
+// ¿Este dispositivo tiene cambios que no ha logrado subir a Drive todavía?
+function hasUnsyncedLocalChanges() {
+  try {
+    const snap = localStorage.getItem('gpgt_last_synced_snapshot');
+    if (!snap) return false; // nunca se ha sincronizado — no hay base para comparar
+    return snap !== JSON.stringify(S);
+  } catch(e) { return false; }
+}
+
+// Metadatos del respaldo actual en Drive (sin descargar el contenido completo)
+async function driveGetRemoteMeta() {
+  try {
+    const fileId = _driveFileId || localStorage.getItem('gpgt_drive_file_id');
+    if (fileId) {
+      const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?fields=id,modifiedTime`, { headers:{ Authorization:'Bearer '+_driveToken } });
+      if (res.ok) return await res.json();
+      return null;
+    }
+    const search = await fetch(
+      `https://www.googleapis.com/drive/v3/files?q=name='${DRIVE_FILE_NAME}'+and+trashed=false&fields=files(id,modifiedTime)&orderBy=modifiedTime+desc`,
+      { headers:{ Authorization:'Bearer '+_driveToken } }
+    );
+    if (!search.ok) return null;
+    const found = await search.json();
+    return (found.files && found.files.length) ? found.files[0] : null;
+  } catch(e) { return null; }
+}
+
+async function driveFetchRemoteContent(fileId) {
+  try {
+    const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, { headers:{ Authorization:'Bearer '+_driveToken } });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch(e) { return null; }
+}
+
+// Combina un arreglo (pedidos, clientes, productos, etc.) identificado por "id",
+// comparando la versión base (última sincronización), la local y la remota.
+function mergeArrayById(base, local, remote, idKey='id') {
+  base = base || []; local = local || []; remote = remote || [];
+  const baseMap = new Map(base.map(x => [x[idKey], x]));
+  const localMap = new Map(local.map(x => [x[idKey], x]));
+  const remoteMap = new Map(remote.map(x => [x[idKey], x]));
+  const allIds = new Set([...localMap.keys(), ...remoteMap.keys()]);
+  const merged = [];
+  let hadClash = false;
+  for (const id of allIds) {
+    const b = baseMap.get(id), l = localMap.get(id), r = remoteMap.get(id);
+    if (l && !r) {
+      if (b) { if (JSON.stringify(l) !== JSON.stringify(b)) merged.push(l); /* si no cambió, se respeta el borrado remoto */ }
+      else merged.push(l); // nuevo local
+    } else if (r && !l) {
+      if (b) { if (JSON.stringify(r) !== JSON.stringify(b)) merged.push(r); /* si no cambió, se respeta el borrado local */ }
+      else merged.push(r); // nuevo remoto
+    } else if (l && r) {
+      const lStr = JSON.stringify(l), rStr = JSON.stringify(r);
+      if (lStr === rStr) { merged.push(l); continue; }
+      const bStr = JSON.stringify(b);
+      const lChanged = lStr !== bStr, rChanged = rStr !== bStr;
+      if (lChanged && !rChanged) merged.push(l);
+      else if (rChanged && !lChanged) merged.push(r);
+      else { merged.push(l); hadClash = true; } // ambos cambiaron el mismo registro — se conserva el local
+    }
+  }
+  return { merged, hadClash };
+}
+
+// Combina la tabla de precios por cliente (estructura anidada clienteId -> productoId -> precio)
+function mergeCp(base, local, remote) {
+  base = base || {}; local = local || {}; remote = remote || {};
+  const allClientIds = new Set([...Object.keys(local), ...Object.keys(remote)]);
+  const merged = {};
+  let hadClash = false;
+  for (const cid of allClientIds) {
+    const b = base[cid] || {}, l = local[cid] || {}, r = remote[cid] || {};
+    const allPid = new Set([...Object.keys(l), ...Object.keys(r)]);
+    const obj = {};
+    for (const pid of allPid) {
+      const bv = b[pid], lv = l[pid], rv = r[pid];
+      if (lv === rv) { if (lv !== undefined) obj[pid] = lv; continue; }
+      const lChanged = lv !== bv, rChanged = rv !== bv;
+      if (lChanged && !rChanged) obj[pid] = lv;
+      else if (rChanged && !lChanged) obj[pid] = rv;
+      else { obj[pid] = lv; hadClash = true; }
+    }
+    merged[cid] = obj;
+  }
+  return { merged, hadClash };
+}
+
+// Combina todas las colecciones de datos usando el respaldo más reciente de Drive
+// como "remoto", el último punto sincronizado como "base", y S como "local".
+async function driveMergeAndSave(remoteData) {
+  const baseStr = localStorage.getItem('gpgt_last_synced_snapshot');
+  const base = baseStr ? JSON.parse(baseStr) : {};
+  const mergedS = JSON.parse(JSON.stringify(S));
+  let anyClash = false;
+
+  [['products','id'], ['clients','id'], ['orders','id'], ['depts','id'],
+   ['municipios','id'], ['rutasCliente','id']].forEach(([key, idKey]) => {
+    const { merged, hadClash } = mergeArrayById(base[key], S[key], remoteData[key], idKey);
+    mergedS[key] = merged;
+    if (hadClash) anyClash = true;
+  });
+
+  const cpRes = mergeCp(base.cp, S.cp, remoteData.cp);
+  mergedS.cp = cpRes.merged;
+  if (cpRes.hadClash) anyClash = true;
+
+  // Datos de empresa (un solo objeto, no colección): si solo cambió un lado, usar ese; si ambos, se queda el local
+  const bBiz = JSON.stringify(base.biz||{}), lBiz = JSON.stringify(S.biz||{}), rBiz = JSON.stringify(remoteData.biz||{});
+  if (lBiz !== rBiz && lBiz === bBiz) mergedS.biz = remoteData.biz;
+
+  // Contadores de próximos IDs: usar el mayor de ambos lados para no repetir IDs
+  ['nextPid','nextCid','nextOid','nextDeptId','nextMunId','nextRutaClienteId'].forEach(k => {
+    mergedS[k] = Math.max(S[k]||1, remoteData[k]||1);
+  });
+
+  S = mergedS;
+  try { localStorage.setItem(LS, JSON.stringify(S)); } catch(e) {}
+  await driveSaveBackup(false);
+  return { anyClash };
 }
 
 function updateDriveDisconnectAlert() {
@@ -10056,6 +10288,7 @@ function initDrive() {
     }, 800);
   }
   renderDriveStatus();
+  if (_driveToken && !pending) checkRemoteSyncStatus();
 }
 
 // ═══════════════════════════════════════════════════════
