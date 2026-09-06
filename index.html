@@ -279,7 +279,7 @@ function fmtDDMMYYYY(d) {
 <button onclick="location.reload()" style="background:none;border:1px solid #2a3050;border-radius:8px;padding:6px 10px;color:#94a3b8;font-size:18px;cursor:pointer;flex-shrink:0" title="Actualizar">🔄</button>
 <button onclick="toggleGlobalSearch(event)" style="background:none;border:1px solid #2a3050;border-radius:8px;padding:6px 10px;color:#94a3b8;font-size:18px;cursor:pointer;flex-shrink:0" title="Buscar">🔍</button>
 <button onclick="goTab('config')" style="background:none;border:1px solid #2a3050;border-radius:8px;padding:6px 10px;color:#94a3b8;font-size:18px;cursor:pointer;flex-shrink:0" title="Configuración">⚙️</button>
-<span id="app-version-badge" style="font-size:9px;color:#475569;flex-shrink:0;align-self:center;margin-left:-4px" title="Versión de la app">v595</span>
+<span id="app-version-badge" style="font-size:9px;color:#475569;flex-shrink:0;align-self:center;margin-left:-4px" title="Versión de la app">v596</span>
 <span id="offline-badge" style="font-size:12px;flex-shrink:0;align-self:center;white-space:nowrap;color:#10b981" title="Con señal">🟢</span>
 </div>
 
@@ -1138,6 +1138,13 @@ function save() {
   _driveSyncTimer = setTimeout(() => {
     if (typeof driveSaveBackup === 'function' && _driveToken) driveSaveBackup(false);
   }, 5000);
+}
+
+// Genera un ID único basado en el momento exacto de creación (en vez de un contador simple).
+// Esto evita que dos dispositivos que crean un registro nuevo al mismo tiempo, sin haberse
+// sincronizado todavía, terminen usando el mismo número de ID por coincidencia.
+function genId() {
+  return Date.now() * 1000 + Math.floor(Math.random() * 1000);
 }
 
 // ═══════════════════════════════════════════════════════
@@ -2357,7 +2364,7 @@ if (unverifiedBonus.length) {
 
 // Nuevo pedido
 const newOrd = {
-  id:S.nextOid++, clientId:cli.id, clientName:cli.name,
+  id:genId(), clientId:cli.id, clientName:cli.name,
   note, comments, quote, quoteNote, oc, delivery, applyIva, pricesIncIva, items, contact,
   conditions: ordConditions.filter(c=>c&&c.trim()),
   bonusLines: ordBonusLines.length ? ordBonusLines.map(bl=>({...bl})) : undefined,
@@ -4123,7 +4130,7 @@ function addDept() {
   const rutaId = null;
   if (!S.depts) S.depts = [];
   if (S.depts.some(d => d.name.toLowerCase() === name.toLowerCase())) { toast('Ese departamento ya existe', '#f59e0b'); return; }
-  S.depts.push({ id: S.nextDeptId++, name, rutaId });
+  S.depts.push({ id: genId(), name, rutaId });
   inp.value = '';
   window._configAddOpen = null;
   save(); renderDeptList(); renderClientsIfActive(); renderConfigLists();
@@ -4586,7 +4593,7 @@ function addRutaCliente() {
   if (!name) { toast('Escribe el nombre de la ruta', '#ef4444'); return; }
   if (!S.rutasCliente) S.rutasCliente = [];
   if (S.rutasCliente.some(r => r.name.toLowerCase() === name.toLowerCase())) { toast('Esa ruta ya existe', '#f59e0b'); return; }
-  S.rutasCliente.push({ id: S.nextRutaClienteId++, name });
+  S.rutasCliente.push({ id: genId(), name });
   inp.value = '';
   window._configAddOpen = null;
   save(); renderRutaClienteList(); renderClientsIfActive(); renderConfigLists();
@@ -4769,7 +4776,7 @@ function addMun() {
   const deptId = null;
   if (!S.municipios) S.municipios = [];
   if (S.municipios.some(m => m.name.toLowerCase() === name.toLowerCase())) { toast('Ese sector ya existe', '#f59e0b'); return; }
-  S.municipios.push({ id: S.nextMunId++, name, deptId });
+  S.municipios.push({ id: genId(), name, deptId });
   inp.value = '';
   window._configAddOpen = null;
   save(); renderMunList(); renderClientsIfActive(); renderConfigLists();
@@ -4899,7 +4906,7 @@ function generateRouteOrders(rid, routeTitle, selDepts, selMuns, selRutas) {
       // Si tiene favorita o varias → dejar vacío para confirmar al editar
 
       const newOrd = {
-        id:          S.nextOid++,
+        id:          genId(),
         clientId:    c.id,
         clientName:  c.name,
         items,
@@ -5427,7 +5434,7 @@ function addClient() {
   const dup = S.clients.find(c => c.name.toLowerCase() === name.toLowerCase());
   if (dup) { toast('⚠️ Ya existe este cliente', '#ef4444'); return; }
   const isProspect = document.getElementById('nc-type-prospect')?.checked === true;
-  const id = S.nextCid++;
+  const id = genId();
   const deptVal = document.getElementById('nc-dept-id')?.value;
   const munVal  = document.getElementById('nc-mun-id')?.value;
   const newClient = {
@@ -9319,7 +9326,7 @@ if (!name) return alert('Ingresa el nombre del producto.');
 if (pr == null || isNaN(pr) || document.getElementById('np-pr').value.trim() === '') return alert('Ingresa el precio por unidad.');
 const dup = S.products.find(p => p.name.toLowerCase() === name.toLowerCase() && (p.presentation||'').toLowerCase() === (pres||'').toLowerCase());
 if (dup) { toast('⚠️ Ya existe este producto', '#ef4444'); return; }
-const id = S.nextPid++;
+const id = genId();
 S.products.push({ id, name, family:fam||'', presentation:pres, unitLabel:ul, unitSize:us, basePrice:pr, color });
 S.clients.forEach(c => { S.cp[c.id] = { ...S.cp[c.id], [id]: pr }; });
 save();
