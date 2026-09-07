@@ -279,7 +279,7 @@ function fmtDDMMYYYY(d) {
 <button onclick="location.reload()" style="background:none;border:1px solid #2a3050;border-radius:8px;padding:6px 10px;color:#94a3b8;font-size:18px;cursor:pointer;flex-shrink:0" title="Actualizar">🔄</button>
 <button onclick="toggleGlobalSearch(event)" style="background:none;border:1px solid #2a3050;border-radius:8px;padding:6px 10px;color:#94a3b8;font-size:18px;cursor:pointer;flex-shrink:0" title="Buscar">🔍</button>
 <button onclick="goTab('config')" style="background:none;border:1px solid #2a3050;border-radius:8px;padding:6px 10px;color:#94a3b8;font-size:18px;cursor:pointer;flex-shrink:0" title="Configuración">⚙️</button>
-<span id="app-version-badge" style="font-size:9px;color:#475569;flex-shrink:0;align-self:center;margin-left:-4px" title="Versión de la app">v602</span>
+<span id="app-version-badge" style="font-size:9px;color:#475569;flex-shrink:0;align-self:center;margin-left:-4px" title="Versión de la app">v604</span>
 <span id="offline-badge" style="font-size:12px;flex-shrink:0;align-self:center;white-space:nowrap;color:#10b981" title="Con señal">🟢</span>
 </div>
 
@@ -3156,14 +3156,16 @@ function shareOrderReportSel() {
 
   if (sameClient) {
     const clientName = filtered[0].clientName;
+    const cliObj = S.clients.find(c => c.id === filtered[0].clientId);
+    const idPart = cliObj && cliObj.clientCode ? `ID: ${cliObj.clientCode} - ` : '';
     const quotes = filtered.map(o => o.quote||'').filter(q=>q);
     const uniqueQuotes = [...new Set(quotes)];
     const sameQuote = uniqueQuotes.length === 1;
 
     // Asunto
     subject = sameQuote && uniqueQuotes[0]
-      ? `${uniqueQuotes[0]} ${clientName}`
-      : clientName;
+      ? `${idPart}${clientName} - ${uniqueQuotes[0]}`
+      : `${idPart}${clientName}`;
 
     // Verificar si todos los pedidos tienen exactamente los mismos comentarios
     const firstCmts = getCmts(filtered[0]).join('||');
@@ -3183,13 +3185,13 @@ function shareOrderReportSel() {
       const sharedQNote = sameQNote && firstQNote ? `${firstQNote}\n\n` : '';
 
       const pedidoLines = filtered.map((o, i) => {
-        const cotLine = (!sameQuote && o.quote) ? `Cotización ${o.quote}\n` : '';
+        const cotLine = (!sameQuote && o.quote) ? `Cot. ${o.quote}\n` : '';
         const ocLine = o.oc ? `Orden ${o.oc}\n` : '';
         const qNoteLine = (!sameQNote && o.quoteNote) ? `Fecha de entrega: ${fmtEntrega(o.quoteNote)}\n` : '';
         const deliveryLine = (!sameDelivery && o.delivery) ? `Entrega: ${o.delivery}\n` : '';
         const prodLines = getProdLines(o);
         const bonusBlock = getBonusBlock(o);
-        return `Pedido #${i+1}\n${cotLine}${ocLine}${qNoteLine}${deliveryLine}${prodLines}${bonusBlock}\n\nTOTAL: ${Q(getTotal(o))}`;
+        return `Pedido #${i+1}\n${cotLine}${ocLine}${qNoteLine}${deliveryLine}${prodLines}\nTOTAL: ${Q(getTotal(o))}${bonusBlock}`;
       }).join('\n\n');
 
       body = `Buen día, por favor facturar y coordinar despacho.\n\n${sharedQNote}${sharedDelivery}${cmtBlock}${pedidoLines}`;
@@ -3211,15 +3213,15 @@ function shareOrderReportSel() {
       const sharedQNote2 = sameQNote2 && firstQNote2 ? `${firstQNote2}\n\n` : '';
 
       const pedidoLines = filtered.map((o, i) => {
-        const cotLine = (!sameQuote && o.quote) ? `Cotización ${o.quote}\n` : '';
+        const cotLine = (!sameQuote && o.quote) ? `Cot. ${o.quote}\n` : '';
         const ocLine = o.oc ? `Orden ${o.oc}\n` : '';
         const qNoteLine = (!sameQNote2 && o.quoteNote) ? `Fecha de entrega: ${fmtEntrega(o.quoteNote)}\n` : '';
         const deliveryLine = (!sameDelivery2 && o.delivery) ? `Entrega: ${o.delivery}\n` : '';
         const uniqueCmts = getCmts(o).filter(c => !commonCmts.includes(c));
-        const cmtBlock = uniqueCmts.length ? uniqueCmts.join('\n') + '\n' : '';
+        const cmtBlock = uniqueCmts.length ? uniqueCmts.join('\n') + '\n\n' : '';
         const prodLines = getProdLines(o);
         const bonusBlock = getBonusBlock(o);
-        return `Pedido #${i+1}\n${cotLine}${ocLine}${qNoteLine}${deliveryLine}${cmtBlock}${prodLines}${bonusBlock}\n\nTOTAL: ${Q(getTotal(o))}`;
+        return `Pedido #${i+1}\n${cotLine}${ocLine}${qNoteLine}${deliveryLine}${cmtBlock}${prodLines}\nTOTAL: ${Q(getTotal(o))}${bonusBlock}`;
       }).join('\n\n');
 
       body = `Buen día, por favor facturar y coordinar despacho.\n\n${sharedQNote2}${sharedDelivery2}${commonBlock}${pedidoLines}`;
@@ -3227,9 +3229,11 @@ function shareOrderReportSel() {
 
   } else {
     // Caso 3: múltiples clientes — texto general actual
-    subject = 'Informe de Pedidos';
+    subject = 'Pedidos Varios';
     const mailLines = filtered.map((o, i) => {
       const cmts = getCmts(o);
+      const cliObj3 = S.clients.find(c => c.id === o.clientId);
+      const idLine = cliObj3 && cliObj3.clientCode ? `ID: ${cliObj3.clientCode} - ${o.clientName}` : `${o.clientName}`;
       const cotLine = o.quote ? `Cot: ${o.quote}` : '';
       const ocLine  = o.oc    ? `Orden ${o.oc}` : '';
       const qNoteLine3 = o.quoteNote ? `Fecha de entrega: ${fmtEntrega(o.quoteNote)}` : '';
@@ -3237,8 +3241,12 @@ function shareOrderReportSel() {
       const cmtLines = cmts.map(c => `${c}`).join('\n');
       const prodLines = getProdLines(o);
       const bonusBlock = getBonusBlock(o);
-      const parts = [`Pedido #${i+1}`, `${o.clientName}`, cotLine, ocLine, qNoteLine3, deliveryLine, cmtLines, '', prodLines + bonusBlock, '', `TOTAL: ${Q(getTotal(o))}`];
-      return parts.filter(l=>l!==null&&l!==undefined&&l!=='').join('\n');
+      let t = [`Pedido #${i+1}`, idLine, cotLine, ocLine, qNoteLine3, deliveryLine].filter(Boolean).join('\n');
+      if (cmtLines) t += '\n' + cmtLines + '\n\n'; else t += '\n';
+      t += prodLines;
+      t += '\n' + `TOTAL: ${Q(getTotal(o))}`;
+      if (bonusBlock) t += '\n\n' + bonusBlock;
+      return t;
     }).join('\n\n');
     body = 'Buen día, por favor facturar:\n\n' + mailLines;
   }
@@ -5272,23 +5280,18 @@ const ocLine = ord.oc ? `Orden ${ord.oc}` : '';
 const qNoteLine = ord.quoteNote ? `Fecha de entrega: ${fmtEntrega(ord.quoteNote)}` : '';
 const deliveryLine = ord.delivery ? `Entrega: ${ord.delivery}` : '';
 
-const parts = [
-  'Buen día, por favor facturar:',
-  '',
-  ocLine,
-  qNoteLine,
-  deliveryLine,
-  comentariosTexto,
-  '',
-  prodLines,
-  bonusBlock ? '' : null,
-  bonusBlock,
-  '',
-  `TOTAL: ${Q(totalFinal)}`
-].filter(l => l !== null && l !== undefined);
+let t = [ocLine, qNoteLine, deliveryLine].filter(Boolean).join('\n');
+if (comentariosTexto) t += (t ? '\n' : '') + comentariosTexto + '\n\n';
+else t += (t ? '\n' : '');
+t += prodLines;
+t += '\n' + `TOTAL: ${Q(totalFinal)}`;
+if (bonusBlock) t += '\n\n' + bonusBlock;
 
-const body = parts.join('\n');
-const subject = `${ord.quote||''} ${ord.clientName}`.trim();
+const body = `Buen día, por favor facturar:\n\n${t}`;
+const cli = S.clients.find(c => c.id === ord.clientId);
+const idPart = cli && cli.clientCode ? `ID: ${cli.clientCode} - ` : '';
+const cotPart = ord.quote ? ` - ${ord.quote}` : '';
+const subject = `${idPart}${ord.clientName}${cotPart}`;
 
 if (navigator.share) {
   navigator.share({ title: subject, text: body }).catch(() => {});
@@ -5318,13 +5321,14 @@ if (b.phone) t += `📞 ${b.phone}\n`;
 if (b.email) t += `✉ ${b.email}\n`;
 t += `\n📄 *COTIZACIÓN*\n`;
 if (qNum) t += `No. ${qNum}\n`;
-t += `Fecha: ${fechaSolo}\n\n`;
-t += `Cliente: ${ord.clientName}\n`;
+t += `Fecha: ${fechaSolo}\n`;
+if (ord.delivery) t += `Dirección de entrega: ${ord.delivery}\n`;
+t += `\n`;
+t += `Cliente: *${ord.clientName}*\n`;
 
-// Comentario de cotización y comentarios normales
+// Comentarios normales
 const cmts = ord.comments && ord.comments.length ? ord.comments : (ord.note ? [ord.note] : []);
-if (ord.quoteNote) t += `\nFecha de entrega: ${fmtEntrega(ord.quoteNote)}\n`;
-cmts.filter(Boolean).forEach(c => { t += `💬 ${c}\n`; });
+cmts.filter(Boolean).forEach(c => { t += `- ${c}\n`; });
 
 // Productos
 t += '\n';
@@ -5338,6 +5342,11 @@ ord.items.forEach(it => {
   t += `  Precio ${Q(pr)}/${ul}${ivaText}\n`;
 });
 
+// Total
+const totalFinal = ord.applyIva ? tot*1.12 : tot;
+const ivaLabel = ord.applyIva ? ' _(IVA incluido)_' : '';
+t += `\n*TOTAL: ${Q(totalFinal)}*${ivaLabel}\n`;
+
 // Bonificaciones
 const bonusLines = (ord.bonusLines||[]).map(bl => {
   const p  = S.products.find(x=>x.id===Number(bl.productId));
@@ -5347,14 +5356,6 @@ const bonusLines = (ord.bonusLines||[]).map(bl => {
   return `- ${bl.qty} *${p?p.name.toUpperCase():'—'}${spec}*\n  Precio ${Q(bl.price||0)}/${ul}${ivaTxtD}`;
 }).join('\n');
 if (bonusLines) t += `\n》BONIFICACIÓN《\n${bonusLines}\n`;
-
-// Total
-const totalFinal = ord.applyIva ? tot*1.12 : tot;
-const ivaLabel = ord.applyIva ? ' _(IVA incluido)_' : '';
-t += `\n*TOTAL: ${Q(totalFinal)}*${ivaLabel}\n`;
-
-// Entrega
-if (ord.delivery) t += `Entrega: ${ord.delivery}\n`;
 
 // Pie de página
 if (b.footer) t += `\n${b.footer}`;
