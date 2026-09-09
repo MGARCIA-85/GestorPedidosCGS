@@ -279,7 +279,7 @@ function fmtDDMMYYYY(d) {
 <button onclick="location.reload()" style="background:none;border:1px solid #2a3050;border-radius:8px;padding:6px 10px;color:#94a3b8;font-size:18px;cursor:pointer;flex-shrink:0" title="Actualizar">🔄</button>
 <button onclick="toggleGlobalSearch(event)" style="background:none;border:1px solid #2a3050;border-radius:8px;padding:6px 10px;color:#94a3b8;font-size:18px;cursor:pointer;flex-shrink:0" title="Buscar">🔍</button>
 <button onclick="goTab('config')" style="background:none;border:1px solid #2a3050;border-radius:8px;padding:6px 10px;color:#94a3b8;font-size:18px;cursor:pointer;flex-shrink:0" title="Configuración">⚙️</button>
-<span id="app-version-badge" style="font-size:9px;color:#475569;flex-shrink:0;align-self:center;margin-left:-4px" title="Versión de la app">v607</span>
+<span id="app-version-badge" style="font-size:9px;color:#475569;flex-shrink:0;align-self:center;margin-left:-4px" title="Versión de la app">v610</span>
 <span id="offline-badge" style="font-size:12px;flex-shrink:0;align-self:center;white-space:nowrap;color:#10b981" title="Con señal">🟢</span>
 </div>
 
@@ -1085,6 +1085,7 @@ let ordComments = [''];
 let ordConditions = [];
 let _duplicatingFrom = null;
 let _duplicatingData = null;
+let _isDuplicateSession = false;
 let editingOid  = null;
 let ordBonusLines = []; // bonificaciones del pedido en edición
 
@@ -1490,7 +1491,7 @@ function renderProspects() {
   ${(window._cliSel||new Set()).has(c.id)?'checked':''}
   onclick="event.stopPropagation();toggleCliSel(${c.id},this.checked)"/>
 <div>
-<div style="font-weight:800;font-size:15px;color:${getPriorityColor(c.priority) || '#f1f5f9'}">${c.name}</div>
+<div style="font-weight:800;font-size:15px;${priorityNameStyle(c.priority,'#f1f5f9')}">${c.name}</div>
 ${c.clientCode ? `<div style="font-size:12px;color:#64748b">🆔 ${c.clientCode}</div>` : ''}
 ${c.priority ? `<div style="font-size:12px;color:#f59e0b">⭐ ${c.priority}</div>` : ''}
 ${c.phone   ? `<div style="font-size:12px;color:#64748b">📞 ${c.phone}</div>` : ''}
@@ -1701,8 +1702,9 @@ function acCliInput() {
   matches.forEach(c => {
     const d = document.createElement('div');
     d.className = 'ac-opt';
-    d.innerHTML = `<span style="color:${getPriorityColor(c.priority) || 'inherit'}">${c.name}</span>` + (c.isProspect ? ' <small style="color:#f59e0b">(Prospecto)</small>' : '') + (c.phone ? '<small>📞 '+c.phone+'</small>' : '');
+    d.innerHTML = `<span style="${priorityNameStyle(c.priority,'inherit')}">${c.name}</span>` + (c.isProspect ? ' <small style="color:#f59e0b">(Prospecto)</small>' : '') + (isClientBlocked(c) ? ' <small style="color:#ef4444">(Bloqueado)</small>' : '') + (c.phone ? '<small>📞 '+c.phone+'</small>' : '');
     d.onmousedown = () => {
+      if (isClientBlocked(c)) { toast('🔒 Este cliente está bloqueado. No se pueden generar pedidos nuevos.', '#ef4444'); acClose('ac-cli-drop'); return; }
       document.getElementById('ord-cli').value = c.id;
       txt.value = c.name;
       acClose('ac-cli-drop');
@@ -1902,7 +1904,7 @@ const c = S.clients.find(x => x.id === cid);
 info.innerHTML = (c.phone ? '📞 '+c.phone : '') + (c.address ? ' &nbsp;📍 '+c.address : '');
 body.style.display = 'block'; ph.style.display = 'none';
 // Si es un pedido nuevo (no edición ni duplicado), precargar el contacto guardado en la ficha del cliente
-if (editingOid === null && !_duplicatingData) {
+if (editingOid === null && !_duplicatingData && !_isDuplicateSession) {
   const contactField = document.getElementById('ord-contact');
   if (contactField) contactField.value = c.contact || '';
 }
@@ -1919,7 +1921,7 @@ if (_defIdx !== null && _defAddrs[_defIdx] && !_duplicatingData && !skipAlert &&
   const inp = document.getElementById('ord-delivery');
   if (inp) { inp.value = _defAddrs[0]; onDeliveryInputChange(); }
 }
-if (editingOid === null) {
+if (editingOid === null && !_duplicatingData && !_isDuplicateSession) {
   // Recopilar TODOS los pedidos del cliente (cualquier estado), ordenados del más nuevo al más viejo
   const facturados = [...S.orders]
     .filter(o => Number(o.clientId) === cid && o.items && o.items.length)
@@ -2239,6 +2241,10 @@ if (bonusBox) {
 function submitOrder(isQuote) {
 const cid = Number(document.getElementById('ord-cli').value);
 if (!cid) return alert('Selecciona un cliente.');
+if (editingOid === null) {
+  const _cliBlockChk = S.clients.find(x=>x.id===cid);
+  if (isClientBlocked(_cliBlockChk)) { toast('🔒 Este cliente está bloqueado. No se pueden generar pedidos nuevos.', '#ef4444'); return; }
+}
 const valid = ordItems.filter(it => it.pid && Number(it.qty) > 0);
 if (!valid.length && !ordBonusLines.length) return alert('Agrega al menos un producto o una bonificación.');
 const delivery = document.getElementById('ord-delivery')?.value.trim() || '';
@@ -2442,6 +2448,7 @@ if (_duplicatingFrom) {
   }
   newOrd.duplicatedFrom = _duplicatingFrom;
   _duplicatingFrom = null;
+  _isDuplicateSession = false;
 }
 S.orders.push(newOrd);
 
@@ -2513,6 +2520,7 @@ if (!bonusTriggered) finishSave();
 // ═══════════════════════════════════════════════════════
 function startEditOrder(id) {
 const ord = S.orders.find(x => x.id===id); if (!ord) return;
+_isDuplicateSession = false; _duplicatingData = null; _duplicatingFrom = null;
 _listScrollY = window.scrollY;
 editingOid = id;
 ordItems   = ord.items.map(it => ({ pid:String(it.productId), qty:it.qty, price: it.customPrice != null ? it.customPrice : null, priceIncludesIva: !!it.priceIncludesIva }));
@@ -2580,8 +2588,8 @@ if (!ord.delivery) {
 
 function cancelEdit() {
 editingOid = null; ordItems = [{pid:'',qty:1}]; ordBonusLines = [];
-const _wasDuplicating = !!_duplicatingFrom || !!_duplicatingData;
-_duplicatingFrom = null; _duplicatingData = null;
+const _wasDuplicating = !!_duplicatingFrom || !!_duplicatingData || _isDuplicateSession;
+_duplicatingFrom = null; _duplicatingData = null; _isDuplicateSession = false;
 const _prevAlert = document.getElementById('delivery-alert');
 if (_prevAlert) _prevAlert.remove();
 document.getElementById('ord-cli').value = ''; document.getElementById('ord-cli-txt').value = '';
@@ -2844,6 +2852,7 @@ renderCommentFields();
 // ═══════════════════════════════════════════════════════
 function duplicateOrder(id) {
   const orig = S.orders.find(x => x.id === id); if (!orig) return;
+  _isDuplicateSession = true;
 
   // Precargar estado antes de abrir el formulario
   editingOid = null;
@@ -2956,7 +2965,7 @@ function getReportFiltered() {
   const fCli  = (document.getElementById('f-cli-report')?.value||'').trim();
   const fFrom = document.getElementById('f-date-from')?.value;
   const fTo   = document.getElementById('f-date-to')?.value;
-  if (_selectedClients && _selectedClients.length) filtered = filtered.filter(o=>_selectedClients.includes(o.clientName));
+  if (_selectedClients && _selectedClients.length) { const _expNames1 = expandSelectedClientNames(_selectedClients); filtered = filtered.filter(o=>_expNames1.includes(o.clientName)); }
 
   if (fFrom||fTo) {
     filtered = filtered.filter(o=>{
@@ -3762,7 +3771,7 @@ const base = _orderAsc
   : [...ords].filter(o => !o.routeId).sort((a,b) => { const td=ordDateTs(b)-ordDateTs(a); return td!==0?td:b.id-a.id; });
 let filtered = _orderTab === 'all' ? base : base.filter(o => o.status === _orderTab);
 // Filtro por cliente (multi-select)
-if (_selectedClients && _selectedClients.length) filtered = filtered.filter(o => _selectedClients.includes(o.clientName));
+if (_selectedClients && _selectedClients.length) { const _expNames2 = expandSelectedClientNames(_selectedClients); filtered = filtered.filter(o => _expNames2.includes(o.clientName)); }
 // Filtro por fecha
 const fFrom = document.getElementById('f-date-from')?.value;
 const fTo   = document.getElementById('f-date-to')?.value;
@@ -4218,6 +4227,59 @@ function getPriorityColor(name) {
   return item ? item.color : null;
 }
 
+// ¿Esta prioridad (por nombre) está marcada para bloquear al cliente?
+function isPriorityBlocking(name) {
+  const n = (name||'').trim();
+  if (!n) return false;
+  const item = (S.priorityList||[]).find(p => p.name === n);
+  return !!(item && item.blocks);
+}
+
+// ¿Este cliente está bloqueado (según su prioridad asignada)?
+function isClientBlocked(c) {
+  return !!c && isPriorityBlocking(c.priority);
+}
+
+// Devuelve, recursivamente, los IDs de todos los clientes "anteriores" vinculados a este cliente
+function getLinkedOldClientIds(cid) {
+  const result = [];
+  const seen = new Set([Number(cid)]);
+  let current = S.clients.find(c => c.id === Number(cid));
+  while (current && current.linkedFromClientId && !seen.has(Number(current.linkedFromClientId))) {
+    const prev = S.clients.find(c => c.id === Number(current.linkedFromClientId));
+    if (!prev) break;
+    result.push(prev.id);
+    seen.add(prev.id);
+    current = prev;
+  }
+  return result;
+}
+
+// IDs de cliente a considerar para historial/reportes de este cliente (él mismo + cuentas anteriores vinculadas)
+function getEffectiveClientIds(cid) {
+  return [Number(cid), ...getLinkedOldClientIds(cid)];
+}
+
+// Expande una lista de nombres de cliente para incluir también los nombres de sus cuentas anteriores vinculadas
+function expandSelectedClientNames(names) {
+  const expanded = new Set(names);
+  (names||[]).forEach(n => {
+    const c = S.clients.find(x => x.name === n);
+    if (c) getLinkedOldClientIds(c.id).forEach(oldId => {
+      const oldC = S.clients.find(x => x.id === oldId);
+      if (oldC) expanded.add(oldC.name);
+    });
+  });
+  return [...expanded];
+}
+
+// Devuelve el estilo CSS completo (color + tachado si bloquea) para el nombre de un cliente según su prioridad
+function priorityNameStyle(name, fallbackColor) {
+  const color = getPriorityColor(name) || fallbackColor || 'inherit';
+  const strike = isPriorityBlocking(name) ? 'text-decoration:line-through;' : '';
+  return `color:${color};${strike}`;
+}
+
 // Paleta ampliada de colores predefinidos para elegir rápido (además del selector libre)
 const PRIORITY_COLOR_PALETTE = [
   '#ef4444','#f97316','#f59e0b','#eab308','#84cc16','#22c55e','#10b981','#14b8a6',
@@ -4234,11 +4296,12 @@ function priorityColorSwatches(inputId) {
 function addPriorityItem() {
   const inp = document.getElementById('new-priority-name');
   const colorInp = document.getElementById('new-priority-color');
+  const blocksInp = document.getElementById('new-priority-blocks');
   const name = inp.value.trim();
   if (!name) { toast('Escribe el nombre de la prioridad', '#ef4444'); return; }
   if (!S.priorityList) S.priorityList = [];
   if (S.priorityList.some(p => p.name.toLowerCase() === name.toLowerCase())) { toast('Esa prioridad ya existe', '#f59e0b'); return; }
-  S.priorityList.push({ name, color: (colorInp && colorInp.value) || '#ef4444' });
+  S.priorityList.push({ name, color: (colorInp && colorInp.value) || '#ef4444', blocks: !!(blocksInp && blocksInp.checked) });
   inp.value = '';
   window._configAddOpen = null;
   save(); renderConfigLists();
@@ -4253,6 +4316,7 @@ function renderPriorityList() {
   wrap.innerHTML = list.map((item, idx) => {
     const name = item.name;
     const color = item.color || '#ef4444';
+    const blocks = !!item.blocks;
     const count = S.clients.filter(c => c.priority === name).length;
     const isEditing = window._editingPriority === idx;
     if (isEditing) {
@@ -4262,6 +4326,10 @@ function renderPriorityList() {
           <input id="edit-priority-${idx}" value="${name.replace(/"/g,'&quot;')}" style="flex:1;background:#161929;border:1px solid #3b82f6;border-radius:6px;padding:5px 8px;color:#f1f5f9;font-size:13px;box-sizing:border-box"/>
         </div>
         ${priorityColorSwatches('edit-priority-color-'+idx)}
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:8px;padding:8px;background:#0d0f18;border-radius:8px;border:1px solid #2a3050">
+          <input type="checkbox" id="edit-priority-blocks-${idx}" ${blocks?'checked':''} style="width:16px;height:16px;cursor:pointer;accent-color:#ef4444"/>
+          <span style="font-size:13px;color:#f1f5f9">🔒 Esta prioridad bloquea al cliente</span>
+        </label>
         <div style="display:flex;gap:6px">
           <button onclick="confirmSavePriorityItem(${idx})" style="flex:1;background:#10b981;border:none;border-radius:6px;color:#fff;padding:6px 8px;cursor:pointer;font-size:12px">💾 Guardar</button>
           <button onclick="window._editingPriority=null;renderPriorityList()" style="background:#475569;border:none;border-radius:6px;color:#fff;padding:6px 8px;cursor:pointer;font-size:12px">✕</button>
@@ -4275,7 +4343,7 @@ function renderPriorityList() {
       </div>
       <span style="width:16px;height:16px;border-radius:50%;background:${color};flex-shrink:0;border:1px solid #0006"></span>
       <button onclick="window._editingPriority=${idx};renderPriorityList()" style="background:none;border:none;color:#f59e0b;cursor:pointer;font-size:14px;padding:2px 4px">✏️</button>
-      <span style="flex:1;font-size:13px;color:${color}">⭐ ${name} <span style="color:#64748b;font-size:11px">(${count} cliente${count!==1?'s':''})</span></span>
+      <span style="flex:1;font-size:13px;color:${color}">⭐ ${name}${blocks?' 🔒':''} <span style="color:#64748b;font-size:11px">(${count} cliente${count!==1?'s':''})</span></span>
       <button class="br" style="font-size:10px;padding:2px 8px" onclick="deletePriorityItem(${idx})">✕</button>
     </div>`;
   }).join('');
@@ -4299,11 +4367,12 @@ function confirmSavePriorityItem(idx) {
 function savePriorityItem(idx) {
   const inp = document.getElementById('edit-priority-'+idx);
   const colorInp = document.getElementById('edit-priority-color-'+idx);
+  const blocksInp = document.getElementById('edit-priority-blocks-'+idx);
   const newName = inp ? inp.value.trim() : '';
   if (!newName) return toast('El nombre no puede estar vacío','#ef4444');
   const oldName = S.priorityList[idx].name;
   if (S.priorityList.some((p,i) => i!==idx && p.name.toLowerCase()===newName.toLowerCase())) return toast('Esa prioridad ya existe','#f59e0b');
-  S.priorityList[idx] = { name: newName, color: (colorInp && colorInp.value) || S.priorityList[idx].color };
+  S.priorityList[idx] = { name: newName, color: (colorInp && colorInp.value) || S.priorityList[idx].color, blocks: !!(blocksInp && blocksInp.checked) };
   S.clients.forEach(c => { if (c.priority === oldName) c.priority = newName; });
   window._editingPriority = null;
   save(); renderConfigLists(); renderClientsIfActive();
@@ -4483,6 +4552,10 @@ function configAddFormHTML(key) {
       <input class="inp" id="new-priority-name" placeholder="Ej: Alta, VIP, 1..." style="flex:1;margin:0"/>
     </div>
     ${priorityColorSwatches('new-priority-color')}
+    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:10px;padding:8px;background:#0d0f18;border-radius:8px;border:1px solid #2a3050">
+      <input type="checkbox" id="new-priority-blocks" style="width:16px;height:16px;cursor:pointer;accent-color:#ef4444"/>
+      <span style="font-size:13px;color:#f1f5f9">🔒 Esta prioridad bloquea al cliente (no se le podrán generar pedidos nuevos)</span>
+    </label>
     <button class="bg" style="width:100%;margin-bottom:10px" onclick="addPriorityItem()">✔ Agregar Prioridad</button>`;
   if (key === 'families') return `
     <input class="inp" id="new-family-name" placeholder="Ej: Thinner, Ácido..."/>
@@ -4964,7 +5037,7 @@ function generateRouteOrders(rid, routeTitle, selDepts, selMuns, selRutas) {
   if (selDepts && selDepts.length) clis = clis.filter(c => selDepts.map(Number).includes(Number(c.deptId)));
   if (selMuns  && selMuns.length)  clis = clis.filter(c => selMuns.map(Number).includes(Number(c.municipioId)));
   // Excluir clientes marcados para no incluirse en la generación automática de rutas
-  clis = clis.filter(c => c.excludeFromAutoRoute !== true);
+  clis = clis.filter(c => c.excludeFromAutoRoute !== true && !isClientBlocked(c));
 
   if (!clis.length) {
     toast("⚠️ No hay clientes que coincidan con los filtros seleccionados.", "#f59e0b");
@@ -5972,7 +6045,8 @@ card.innerHTML = `
   onclick="event.stopPropagation();toggleCliSel(${c.id},this.checked)"/>
 ${dh}
 <div>
-<div style="font-weight:800;font-size:15px;color:${getPriorityColor(c.priority) || '#f1f5f9'}">${c.name}</div>
+<div style="font-weight:800;font-size:15px;${priorityNameStyle(c.priority,'#f1f5f9')}">${c.name}</div>
+${(()=>{ const _replacement = S.clients.find(x=>x.linkedFromClientId===c.id); return _replacement?`<div onclick="event.stopPropagation();openClientCard(${_replacement.id})" style="font-size:11px;color:#a855f7;font-weight:700;margin-top:1px;cursor:pointer;text-decoration:underline">🔗 Reemplazado por: ${_replacement.name}</div>`:''; })()}
 ${c.clientCode ? `<div style="font-size:12px;color:#64748b">🆔 ${c.clientCode}</div>` : ''}
 ${c.priority ? `<div style="font-size:12px;color:#f59e0b">⭐ ${c.priority}</div>` : ''}
 ${c.phone   ? `<div style="font-size:12px;color:#64748b">📞 ${c.phone}</div>` : ''}
@@ -6208,7 +6282,8 @@ ${(()=>{
 })()}
 
 ${(()=>{
-  const cliOrds = [...S.orders].filter(o=>Number(o.clientId)===Number(c.id)).sort((a,b)=>{ const td=ordDateTs(b)-ordDateTs(a); return td!==0?td:b.id-a.id; });
+  const _effIds = getEffectiveClientIds(c.id);
+  const cliOrds = [...S.orders].filter(o=>_effIds.includes(Number(o.clientId))).sort((a,b)=>{ const td=ordDateTs(b)-ordDateTs(a); return td!==0?td:b.id-a.id; });
   if (!cliOrds.length) return '';
   const rows_map = {};
   cliOrds.forEach(o=>{
@@ -6234,7 +6309,9 @@ ${(()=>{
     const duplBtn = `<button onclick="openDuplFromCli(${o.id})" style="flex:1;padding:5px 0;background:transparent;border:1px solid #a855f7;border-radius:6px;color:#a855f7;font-size:11px;cursor:pointer">📋 Dupl.</button>`;
     const delBtn  = `<button onclick="openDelFromCli(${o.id})" style="flex:1;padding:5px 0;background:transparent;border:1px solid #ef4444;border-radius:6px;color:#ef4444;font-size:11px;cursor:pointer">🗑</button>`;
     const reactBtn = o.cancelled ? `<button onclick="reactivateOrder(${o.id})" style="width:100%;padding:6px 0;background:transparent;border:1px solid #10b981;border-radius:6px;color:#10b981;font-size:11px;font-weight:700;cursor:pointer;margin-top:4px">🔄 Reactivar pedido</button>` : '';
+    const _isInherited = Number(o.clientId) !== Number(c.id);
     const rowHtml = `<div data-cli-oid="${o.id}" style="background:#161929;border-radius:8px;padding:8px 10px;margin-bottom:8px;border-left-width:3px;border-left-style:solid;border-left-color:${sCls};touch-action:pan-y">
+      ${_isInherited?`<div style="font-size:10px;color:#a855f7;font-weight:700;margin-bottom:4px">📁 Cuenta anterior</div>`:''}
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">
         <div style="display:flex;align-items:center;gap:6px">
           <input type="checkbox" class="cli-ord-chk" data-cid="${c.id}" data-oid="${o.id}" onchange="updateCliOrdSummary(${c.id})"
@@ -6458,7 +6535,7 @@ function plSearchClients(id) {
     const d = document.createElement('div');
     d.className = 'ac-opt';
     d.textContent = c.name;
-    d.style.color = getPriorityColor(c.priority) || '';
+    d.style.color = getPriorityColor(c.priority) || ''; d.style.textDecoration = isPriorityBlocking(c.priority) ? 'line-through' : '';
     d.onmousedown = () => {
       _plEditState.clientIds.push(c.id);
       txt.value = '';
@@ -6852,7 +6929,7 @@ function brSearchExtraClients() {
     const d = document.createElement('div');
     d.className = 'ac-opt';
     d.textContent = c.name;
-    d.style.color = getPriorityColor(c.priority) || '';
+    d.style.color = getPriorityColor(c.priority) || ''; d.style.textDecoration = isPriorityBlocking(c.priority) ? 'line-through' : '';
     d.onmousedown = () => {
       _brExtraClients.push(c.id);
       txt.value = '';
@@ -7734,9 +7811,10 @@ function generateBonusSimpleReport(cid, fromStr, toStr, includeBonus=true, prodI
     return '';
   }
 
-  // Todos los pedidos del cliente en el rango
+  // Todos los pedidos del cliente en el rango (incluye cuentas anteriores vinculadas)
+  const _effIdsRep1 = getEffectiveClientIds(cid);
   let allOrders = S.orders
-    .filter(o => Number(o.clientId)===Number(cid) &&
+    .filter(o => _effIdsRep1.includes(Number(o.clientId)) &&
       (o.status==='Confirmado'||o.status==='Concluido'))
     .sort((a,b)=>ordDateTs(a)-ordDateTs(b))
     .filter(o => { const ds=toYMD(o.date); return ds>=fromStr && ds<=toStr; });
@@ -7915,9 +7993,10 @@ function generateBonusHistoryReport(cid, fromStr, toStr) {
     return '';
   }
 
-  // Obtener todos los pedidos del cliente ordenados por fecha
+  // Obtener todos los pedidos del cliente ordenados por fecha (incluye cuentas anteriores vinculadas)
+  const _effIdsRep2 = getEffectiveClientIds(cid);
   const allOrders = S.orders
-    .filter(o => Number(o.clientId)===Number(cid) &&
+    .filter(o => _effIdsRep2.includes(Number(o.clientId)) &&
       (o.status==='Confirmado'||o.status==='Concluido'))
     .sort((a,b)=>ordDateTs(a)-ordDateTs(b));
 
@@ -8734,7 +8813,13 @@ function editCliAddress(cid, idx) {
 }
 
 function newOrderForClient(cid) {
+  const _cliChk = S.clients.find(c => c.id === Number(cid));
+  if (isClientBlocked(_cliChk)) {
+    toast('🔒 Este cliente está bloqueado. No se pueden generar pedidos nuevos.', '#ef4444');
+    return;
+  }
   editingOid = null;
+  _isDuplicateSession = false; _duplicatingData = null; _duplicatingFrom = null;
   ordItems = [{pid:'',qty:1}];
   ordComments = [''];
   goTab('order');
@@ -8845,10 +8930,19 @@ function editCliForm(id) {
 const c = S.clients.find(x=>x.id===id);
 const curDept = (S.depts||[]).find(d=>d.id===c.deptId);
 const curMun  = (S.municipios||[]).find(m=>m.id===c.municipioId);
+const linkedClient = c.linkedFromClientId ? S.clients.find(x=>x.id===c.linkedFromClientId) : null;
 document.getElementById("cc-"+id).innerHTML =
 '<label class="lbl">Nombre</label><input class="inp" id="ecn-'+id+'" value="'+c.name+'"/>' +
 '<label class="lbl">ID Cliente</label><input class="inp" id="eccid-'+id+'" value="'+(c.clientCode||'')+'" placeholder="Código de identificación"/>' +
 '<label class="lbl">⭐ Prioridad</label><select class="sel" id="ecpriority-'+id+'" style="width:100%;margin-bottom:12px"><option value="">— Sin prioridad —</option>'+(S.priorityList||[]).map(p=>'<option value="'+p.name+'" '+(c.priority===p.name?'selected':'')+'>'+p.name+'</option>').join('')+'</select>' +
+'<label class="lbl">🔗 Cuenta anterior (opcional)</label>' +
+'<div style="font-size:11px;color:#64748b;margin-bottom:4px">Si este cliente reemplaza a otro (cambio de razón social), relaciónalo aquí para ver su historial de pedidos.</div>' +
+'<div style="position:relative;margin-bottom:6px">' +
+'<input id="ecll-'+id+'" class="inp" style="margin-bottom:0" placeholder="Buscar cliente anterior..." value="'+(linkedClient?linkedClient.name.replace(/"/g,'&quot;'):'')+'" autocomplete="off" oninput="cliLinkSearch('+id+',this.value)" onfocus="cliLinkSearch('+id+',this.value)"/>' +
+'<input type="hidden" id="ecl-'+id+'" value="'+(c.linkedFromClientId||'')+'"/>' +
+'<div id="ecldrop-'+id+'" style="display:none;position:absolute;top:100%;left:0;right:0;background:#1e2640;border:1px solid #a855f7;border-radius:8px;z-index:200;max-height:160px;overflow-y:auto"></div>' +
+'</div>' +
+'<button type="button" onclick="unlinkCliPrevious('+id+')" style="font-size:11px;background:none;border:1px solid #ef4444;color:#ef4444;border-radius:8px;padding:3px 10px;cursor:pointer;margin-bottom:12px">Quitar relación</button>' +
 '<div id="restprod-wrap-'+id+'">' + buildRestrictedProdChecklist(c) + '</div>' +
 '<label class="lbl">Contacto</label><input class="inp" id="eccontact-'+id+'" value="'+(c.contact||'')+'" placeholder="Nombre de la persona de contacto"/>' +
 '<label class="lbl">Teléfono</label><input class="inp" id="ecp-'+id+'" value="'+(c.phone||"")+'" />' +
@@ -8878,6 +8972,44 @@ document.getElementById("cc-"+id).innerHTML =
 '<button class="bg" onclick="saveCliForm('+id+')">✔ Guardar</button>' +
 '<button class="bs" onclick="cancelEditCliForm('+id+')">Cancelar</button>' +
 '</div>';
+}
+
+function cliLinkSearch(cid, q) {
+  const drop = document.getElementById('ecldrop-'+cid);
+  if (!drop) return;
+  const ql = q.toLowerCase();
+  let list = S.clients.filter(x => x.id !== cid && (!ql || x.name.toLowerCase().includes(ql)));
+  list = list.sort((a,b)=>a.name.localeCompare(b.name,'es')).slice(0,30);
+  if (!list.length) { drop.style.display='block'; drop.innerHTML = '<div style="padding:9px 12px;font-size:12px;color:#64748b">Sin resultados</div>'; return; }
+  drop.style.display='block';
+  drop.innerHTML = list.map(x=>
+    `<div onclick="selectCliLink(${cid},${x.id},'${x.name.replace(/'/g,"\\'")}');event.stopPropagation()"
+      style="padding:9px 12px;font-size:13px;${priorityNameStyle(x.priority,'#f1f5f9')}cursor:pointer;border-bottom:1px solid #2a3050"
+      onmousedown="event.preventDefault()">
+      ${x.name}
+    </div>`
+  ).join('');
+  setTimeout(()=>{ document.addEventListener('click', ()=>{ drop.style.display='none'; }, {once:true}); }, 50);
+}
+
+function selectCliLink(cid, linkedId, name) {
+  if (getLinkedOldClientIds(linkedId).includes(Number(cid)) || Number(linkedId) === Number(cid)) {
+    toast('⚠️ No se puede crear una relación circular entre estos clientes', '#ef4444');
+    return;
+  }
+  const lbl = document.getElementById('ecll-'+cid);
+  const hid = document.getElementById('ecl-'+cid);
+  const drp = document.getElementById('ecldrop-'+cid);
+  if (lbl) lbl.value = name;
+  if (hid) hid.value = linkedId;
+  if (drp) drp.style.display = 'none';
+}
+
+function unlinkCliPrevious(cid) {
+  const lbl = document.getElementById('ecll-'+cid);
+  const hid = document.getElementById('ecl-'+cid);
+  if (lbl) lbl.value = '';
+  if (hid) hid.value = '';
 }
 
 function cliFieldSearch(type, cid, q) {
@@ -8951,6 +9083,8 @@ c.name       = document.getElementById("ecn-"+id).value.trim();
 c.clientCode = document.getElementById("eccid-"+id)?.value.trim() || '';
 c.contact    = document.getElementById("eccontact-"+id)?.value.trim() || '';
 c.priority   = document.getElementById("ecpriority-"+id)?.value.trim() || '';
+const selLink = document.getElementById("ecl-"+id)?.value;
+c.linkedFromClientId = selLink ? Number(selLink) : null;
 const restWrap = document.getElementById("restprod-wrap-"+id);
 c.authorizedProducts = restWrap ? [...restWrap.querySelectorAll('.restprod-chk:checked')].map(el=>Number(el.dataset.pid)) : (c.authorizedProducts||[]);
 delete c.authorizedRestricted;
@@ -9267,7 +9401,7 @@ function linkSearchClients(cid) {
     const d = document.createElement('div');
     d.className = 'ac-opt';
     d.textContent = c.name;
-    d.style.color = getPriorityColor(c.priority) || '';
+    d.style.color = getPriorityColor(c.priority) || ''; d.style.textDecoration = isPriorityBlocking(c.priority) ? 'line-through' : '';
     d.onmousedown = () => {
       _linkExtraClients.push(c.id);
       txt.value = '';
@@ -11907,7 +12041,7 @@ function runGlobalSearch() {
     html += `<div style="padding:5px 12px;font-size:10px;color:#64748b;font-weight:700;text-transform:uppercase;background:#161929;letter-spacing:.5px">👥 Clientes</div>`;
     html += clis.slice(0,6).map(x =>
       `<div class="gs-opt" onclick="gsGoClient(${x.id})">
-        <div style="font-weight:700;color:${getPriorityColor(x.priority) || '#f1f5f9'}">${hl(x.name)}</div>
+        <div style="font-weight:700;${priorityNameStyle(x.priority,'#f1f5f9')}">${hl(x.name)}</div>
         ${x.phone?`<div style="font-size:11px;color:#64748b">📞 ${hl(x.phone)}</div>`:''}
       </div>`).join('');
   }
@@ -11958,7 +12092,7 @@ function runGlobalSearch() {
       const bonusHtml = (x.bonusLines&&x.bonusLines.length)?`<div style="margin-top:4px"><div style="font-size:10px;color:#10b981;font-weight:700">🎁 BONIFICACIÓN</div>${x.bonusLines.map(bl=>{const p=S.products.find(pp=>pp.id===Number(bl.productId));const spec=p?.presentation?` (${p.presentation})`:'';const _ivaTagG=x.applyIva?' <span style="font-size:9px;color:#60a5fa">+IVA</span>':'';return `<div style="font-size:11px;color:#f1f5f9">${bl.qty} ${p?p.name:'—'}${spec} × ${Q(bl.price||0)}/${p?.unitLabel||'u'}${_ivaTagG}</div>`;}).join('')}</div>`:'';
       return `<div class="gs-opt" onclick="gsGoOrder(${x.id})">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">
-          <span style="font-weight:700;color:${(()=>{const cc=S.clients.find(cl=>cl.id===x.clientId);return cc?(getPriorityColor(cc.priority)||'#f1f5f9'):'#f1f5f9';})()};font-size:13px">${hl(x.clientName)}</span>
+          <span style="font-weight:700;${(()=>{const cc=S.clients.find(cl=>cl.id===x.clientId);return cc?priorityNameStyle(cc.priority,'#f1f5f9'):'color:#f1f5f9;';})()}font-size:13px">${hl(x.clientName)}</span>
           <div style="display:flex;align-items:center;gap:4px">
             ${route?`<span style="font-size:10px;color:#f59e0b;font-weight:700">(RUTA)</span>`:''}
             <span style="font-size:10px;color:${sc};font-weight:700;border:1px solid ${sc};padding:0 5px;border-radius:8px">${x.status}</span>
