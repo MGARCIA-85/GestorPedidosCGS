@@ -279,7 +279,7 @@ function fmtDDMMYYYY(d) {
 <button onclick="location.reload()" style="background:none;border:1px solid #2a3050;border-radius:8px;padding:6px 10px;color:#94a3b8;font-size:18px;cursor:pointer;flex-shrink:0" title="Actualizar">🔄</button>
 <button onclick="toggleGlobalSearch(event)" style="background:none;border:1px solid #2a3050;border-radius:8px;padding:6px 10px;color:#94a3b8;font-size:18px;cursor:pointer;flex-shrink:0" title="Buscar">🔍</button>
 <button onclick="goTab('config')" style="background:none;border:1px solid #2a3050;border-radius:8px;padding:6px 10px;color:#94a3b8;font-size:18px;cursor:pointer;flex-shrink:0" title="Configuración">⚙️</button>
-<span id="app-version-badge" style="font-size:9px;color:#475569;flex-shrink:0;align-self:center;margin-left:-4px" title="Versión de la app">v604</span>
+<span id="app-version-badge" style="font-size:9px;color:#475569;flex-shrink:0;align-self:center;margin-left:-4px" title="Versión de la app">v606</span>
 <span id="offline-badge" style="font-size:12px;flex-shrink:0;align-self:center;white-space:nowrap;color:#10b981" title="Con señal">🟢</span>
 </div>
 
@@ -3182,7 +3182,7 @@ function shareOrderReportSel() {
       // QuoteNote: si todos tienen el mismo va arriba, si no va en cada pedido
       const firstQNote = filtered[0].quoteNote || '';
       const sameQNote = filtered.every(o => (o.quoteNote || '') === firstQNote);
-      const sharedQNote = sameQNote && firstQNote ? `${firstQNote}\n\n` : '';
+      const sharedQNote = sameQNote && firstQNote ? `Fecha de entrega: ${fmtEntrega(firstQNote)}\n\n` : '';
 
       const pedidoLines = filtered.map((o, i) => {
         const cotLine = (!sameQuote && o.quote) ? `Cot. ${o.quote}\n` : '';
@@ -3210,7 +3210,7 @@ function shareOrderReportSel() {
       // QuoteNote: si todos tienen el mismo va arriba, si no va en cada pedido
       const firstQNote2 = filtered[0].quoteNote || '';
       const sameQNote2 = filtered.every(o => (o.quoteNote || '') === firstQNote2);
-      const sharedQNote2 = sameQNote2 && firstQNote2 ? `${firstQNote2}\n\n` : '';
+      const sharedQNote2 = sameQNote2 && firstQNote2 ? `Fecha de entrega: ${fmtEntrega(firstQNote2)}\n\n` : '';
 
       const pedidoLines = filtered.map((o, i) => {
         const cotLine = (!sameQuote && o.quote) ? `Cot. ${o.quote}\n` : '';
@@ -3326,11 +3326,13 @@ function generateOrderReport(selIds) {
         : `<span style="color:#374151;font-weight:600">💬 ${c}</span>`
       ).join('<br>') + '</div>' : '';
     const bonusSeparator = bonusRowsHtml ? `<tr style="background:#f0fdf4"><td colspan="4" style="padding:2px 8px;font-size:10px;color:#15803d;border-top:2px dashed #86efac;font-weight:700">─── BONIFICACIONES ───</td></tr>` : '';
+    const _cliRep = S.clients.find(c => c.id === o.clientId);
+    const _idRep = _cliRep && _cliRep.clientCode ? `ID: ${_cliRep.clientCode} - ` : '';
     return `<div style="border:1px solid #e5e7eb;border-radius:8px;margin-bottom:12px;overflow:hidden;page-break-inside:avoid">
       <div style="background:#f9fafb;padding:8px 12px">
         <div style="display:flex;justify-content:space-between;align-items:flex-start">
           <div style="flex:1;min-width:0">
-            <div style="font-size:16px;font-weight:900;color:#1e3a8a">#${i+1} ${o.clientName}</div>
+            <div style="font-size:16px;font-weight:900;color:#1e3a8a">#${i+1} ${_idRep}${o.clientName}</div>
             ${o.quote?`<div style="font-size:13px;color:#111;margin-top:2px">📋 Cot: <strong>${o.quote}</strong></div>`:''}
             ${o.oc?`<div style="font-size:13px;color:#111;margin-top:2px">📄 OC: <strong>${o.oc}</strong></div>`:''}
             ${o.quoteNote?`<div style="font-size:16px;color:#f59e0b;font-weight:700;margin-top:3px;padding:3px 7px;background:#fffbeb;border-left:3px solid #f59e0b;border-radius:3px">Fecha de entrega: ${fmtEntrega(o.quoteNote)}</div>`:''}
@@ -11576,11 +11578,13 @@ function generateRouteReport(rid, selIds, returnHTML=false) {
         : `<span style="color:#374151;font-weight:600">💬 ${c}</span>`
       ).join('<br>') + '</div>' : '';
     const bonusSep = bonusRows ? `<tr><td colspan="4" style="padding:2px 8px;font-size:10px;color:#15803d;border-top:2px dashed #86efac;font-weight:700;background:#eff6ff">─── BONIFICACIONES ───</td></tr>` : '';
+    const _cliRoute = S.clients.find(c => c.id === o.clientId);
+    const _idRoute = _cliRoute && _cliRoute.clientCode ? `ID: ${_cliRoute.clientCode} - ` : '';
     return `<div style="break-inside:avoid;margin-bottom:14px;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden">
       <div style="background:#f9fafb;padding:8px 12px;border-bottom:1px solid #e5e7eb">
         <div style="display:flex;justify-content:space-between;align-items:center">
           <div>
-            <span style="font-size:12px;color:#6b7280;font-weight:600">#${rIdx+1} &nbsp;</span><span style="font-weight:900;font-size:16px;color:${o.status==='Confirmado'?'#1d4ed8':o.status==='Concluido'?'#15803d':'#1e3a8a'}">${o.clientName}</span>
+            <span style="font-size:12px;color:#6b7280;font-weight:600">#${rIdx+1} &nbsp;</span><span style="font-weight:900;font-size:16px;color:${o.status==='Confirmado'?'#1d4ed8':o.status==='Concluido'?'#15803d':'#1e3a8a'}">${_idRoute}${o.clientName}</span>
           </div>
           <span style="font-size:11px;font-weight:700;color:${sc};border:1px solid ${sc};padding:1px 8px;border-radius:10px">${o.status}</span>
         </div>
