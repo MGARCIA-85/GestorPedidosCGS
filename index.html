@@ -279,7 +279,7 @@ function fmtDDMMYYYY(d) {
 <button onclick="location.reload()" style="background:none;border:1px solid #2a3050;border-radius:8px;padding:6px 10px;color:#94a3b8;font-size:18px;cursor:pointer;flex-shrink:0" title="Actualizar">🔄</button>
 <button onclick="toggleGlobalSearch(event)" style="background:none;border:1px solid #2a3050;border-radius:8px;padding:6px 10px;color:#94a3b8;font-size:18px;cursor:pointer;flex-shrink:0" title="Buscar">🔍</button>
 <button onclick="goTab('config')" style="background:none;border:1px solid #2a3050;border-radius:8px;padding:6px 10px;color:#94a3b8;font-size:18px;cursor:pointer;flex-shrink:0" title="Configuración">⚙️</button>
-<span id="app-version-badge" style="font-size:9px;color:#475569;flex-shrink:0;align-self:center;margin-left:-4px" title="Versión de la app">v620</span>
+<span id="app-version-badge" style="font-size:9px;color:#475569;flex-shrink:0;align-self:center;margin-left:-4px" title="Versión de la app">v621</span>
 <span id="offline-badge" style="font-size:12px;flex-shrink:0;align-self:center;white-space:nowrap;color:#10b981" title="Con señal">🟢</span>
 </div>
 
@@ -9449,10 +9449,8 @@ const c  = S.clients.find(x=>x.id===cid);
 const cp = S.cp[cid] || S.cp[String(cid)] || {};
 const visible = (cp._visible || []).map(Number);
 
-// Productos asignados ordenados por categoría, luego nombre
-const assigned = S.products
-  .filter(p => visible.includes(Number(p.id)))
-  .sort((a,b) => (a.family||'').localeCompare(b.family||'','es') || a.name.localeCompare(b.name,'es'));
+// Productos asignados, en el mismo orden configurado en la lista general de productos
+const assigned = S.products.filter(p => visible.includes(Number(p.id)));
 
 // Productos no asignados agrupados por categoría
 const unassigned = S.products.filter(p => !visible.includes(Number(p.id)));
@@ -12172,7 +12170,6 @@ function showPriceListDoc(cid) {
 
   const prods = S.products
     .filter(p => visible.includes(Number(p.id)))
-    .sort((a,b) => (a.family||'').localeCompare(b.family||'','es') || a.name.localeCompare(b.name,'es'))
     .map(p => {
       const pr = (cp[p.id] != null) ? cp[p.id] : p.basePrice;
       const ul = p.unitLabel || 'u';
