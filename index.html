@@ -279,7 +279,7 @@ function fmtDDMMYYYY(d) {
 <button onclick="location.reload()" style="background:none;border:1px solid #2a3050;border-radius:8px;padding:6px 10px;color:#94a3b8;font-size:18px;cursor:pointer;flex-shrink:0" title="Actualizar">🔄</button>
 <button onclick="toggleGlobalSearch(event)" style="background:none;border:1px solid #2a3050;border-radius:8px;padding:6px 10px;color:#94a3b8;font-size:18px;cursor:pointer;flex-shrink:0" title="Buscar">🔍</button>
 <button onclick="goTab('config')" style="background:none;border:1px solid #2a3050;border-radius:8px;padding:6px 10px;color:#94a3b8;font-size:18px;cursor:pointer;flex-shrink:0" title="Configuración">⚙️</button>
-<span id="app-version-badge" style="font-size:9px;color:#475569;flex-shrink:0;align-self:center;margin-left:-4px" title="Versión de la app">v611</span>
+<span id="app-version-badge" style="font-size:9px;color:#475569;flex-shrink:0;align-self:center;margin-left:-4px" title="Versión de la app">v613</span>
 <span id="offline-badge" style="font-size:12px;flex-shrink:0;align-self:center;white-space:nowrap;color:#10b981" title="Con señal">🟢</span>
 </div>
 
@@ -1344,7 +1344,9 @@ function clearDateRange() {
   document.getElementById('date-range-picker').style.display = 'none';
 }
 
-function clientNameColor(status) {
+function clientNameColor(o) {
+  if (isOrderBlocked(o)) return '#a855f7';
+  const status = o && o.status;
   if (status === 'Confirmado') return '#60a5fa';
   if (status === 'Concluido')  return '#4ade80';
   return '#f1f5f9'; // Cotización = blanco
@@ -3825,7 +3827,7 @@ card.innerHTML = `
   ${(window._ordSel||new Set()).has(o.id)?'checked':''}
   onclick="event.stopPropagation();toggleOrdSel(${o.id},this.checked)"/>
 <div>
-<div style="font-weight:800;font-size:15px;color:${clientNameColor(o.status)};cursor:pointer;text-decoration:underline" onclick="event.stopPropagation();openClientCard(${o.clientId})">${o.clientName}</div>
+<div style="font-weight:800;font-size:15px;color:${clientNameColor(o)};cursor:pointer;text-decoration:underline" onclick="event.stopPropagation();openClientCard(${o.clientId})">${o.clientName}</div>
 <div style="font-size:10px;color:#64748b">${o.date}${o.editedAt?' · Editado: '+o.editedAt:''}</div>
 ${_blocked?`<div style="font-size:11px;color:#a855f7;font-weight:700;margin-top:1px">🔒 Bloqueado (fecha futura)</div>`:''}
 ${o.quote?`<div style="font-size:11px;color:#94a3b8;margin-top:1px">Cot: ${o.quote}</div>`:''}
@@ -4235,6 +4237,14 @@ function isPriorityBlocking(name) {
   return !!(item && item.blocks);
 }
 
+// ¿Esta prioridad (por nombre) está marcada para excluirse de la generación automática de rutas?
+function isPriorityExcludedFromRoute(name) {
+  const n = (name||'').trim();
+  if (!n) return false;
+  const item = (S.priorityList||[]).find(p => p.name === n);
+  return !!(item && item.excludeRoute);
+}
+
 // ¿Este cliente está bloqueado (según su prioridad asignada)?
 function isClientBlocked(c) {
   return !!c && isPriorityBlocking(c.priority);
@@ -4297,11 +4307,12 @@ function addPriorityItem() {
   const inp = document.getElementById('new-priority-name');
   const colorInp = document.getElementById('new-priority-color');
   const blocksInp = document.getElementById('new-priority-blocks');
+  const exclRouteInp = document.getElementById('new-priority-exclroute');
   const name = inp.value.trim();
   if (!name) { toast('Escribe el nombre de la prioridad', '#ef4444'); return; }
   if (!S.priorityList) S.priorityList = [];
   if (S.priorityList.some(p => p.name.toLowerCase() === name.toLowerCase())) { toast('Esa prioridad ya existe', '#f59e0b'); return; }
-  S.priorityList.push({ name, color: (colorInp && colorInp.value) || '#ef4444', blocks: !!(blocksInp && blocksInp.checked) });
+  S.priorityList.push({ name, color: (colorInp && colorInp.value) || '#ef4444', blocks: !!(blocksInp && blocksInp.checked), excludeRoute: !!(exclRouteInp && exclRouteInp.checked) });
   inp.value = '';
   window._configAddOpen = null;
   save(); renderConfigLists();
@@ -4317,6 +4328,7 @@ function renderPriorityList() {
     const name = item.name;
     const color = item.color || '#ef4444';
     const blocks = !!item.blocks;
+    const exclRoute = !!item.excludeRoute;
     const count = S.clients.filter(c => c.priority === name).length;
     const isEditing = window._editingPriority === idx;
     if (isEditing) {
@@ -4329,6 +4341,10 @@ function renderPriorityList() {
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:8px;padding:8px;background:#0d0f18;border-radius:8px;border:1px solid #2a3050">
           <input type="checkbox" id="edit-priority-blocks-${idx}" ${blocks?'checked':''} style="width:16px;height:16px;cursor:pointer;accent-color:#ef4444"/>
           <span style="font-size:13px;color:#f1f5f9">🔒 Esta prioridad bloquea al cliente</span>
+        </label>
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:8px;padding:8px;background:#0d0f18;border-radius:8px;border:1px solid #2a3050">
+          <input type="checkbox" id="edit-priority-exclroute-${idx}" ${exclRoute?'checked':''} style="width:16px;height:16px;cursor:pointer;accent-color:#f59e0b"/>
+          <span style="font-size:13px;color:#f1f5f9">🚫 Excluir de la generación automática de rutas</span>
         </label>
         <div style="display:flex;gap:6px">
           <button onclick="confirmSavePriorityItem(${idx})" style="flex:1;background:#10b981;border:none;border-radius:6px;color:#fff;padding:6px 8px;cursor:pointer;font-size:12px">💾 Guardar</button>
@@ -4343,7 +4359,7 @@ function renderPriorityList() {
       </div>
       <span style="width:16px;height:16px;border-radius:50%;background:${color};flex-shrink:0;border:1px solid #0006"></span>
       <button onclick="window._editingPriority=${idx};renderPriorityList()" style="background:none;border:none;color:#f59e0b;cursor:pointer;font-size:14px;padding:2px 4px">✏️</button>
-      <span style="flex:1;font-size:13px;color:${color}">⭐ ${name}${blocks?' 🔒':''} <span style="color:#64748b;font-size:11px">(${count} cliente${count!==1?'s':''})</span></span>
+      <span style="flex:1;font-size:13px;color:${color}">⭐ ${name}${blocks?' 🔒':''}${exclRoute?' 🚫':''} <span style="color:#64748b;font-size:11px">(${count} cliente${count!==1?'s':''})</span></span>
       <button class="br" style="font-size:10px;padding:2px 8px" onclick="deletePriorityItem(${idx})">✕</button>
     </div>`;
   }).join('');
@@ -4368,11 +4384,12 @@ function savePriorityItem(idx) {
   const inp = document.getElementById('edit-priority-'+idx);
   const colorInp = document.getElementById('edit-priority-color-'+idx);
   const blocksInp = document.getElementById('edit-priority-blocks-'+idx);
+  const exclRouteInp = document.getElementById('edit-priority-exclroute-'+idx);
   const newName = inp ? inp.value.trim() : '';
   if (!newName) return toast('El nombre no puede estar vacío','#ef4444');
   const oldName = S.priorityList[idx].name;
   if (S.priorityList.some((p,i) => i!==idx && p.name.toLowerCase()===newName.toLowerCase())) return toast('Esa prioridad ya existe','#f59e0b');
-  S.priorityList[idx] = { name: newName, color: (colorInp && colorInp.value) || S.priorityList[idx].color, blocks: !!(blocksInp && blocksInp.checked) };
+  S.priorityList[idx] = { name: newName, color: (colorInp && colorInp.value) || S.priorityList[idx].color, blocks: !!(blocksInp && blocksInp.checked), excludeRoute: !!(exclRouteInp && exclRouteInp.checked) };
   S.clients.forEach(c => { if (c.priority === oldName) c.priority = newName; });
   window._editingPriority = null;
   save(); renderConfigLists(); renderClientsIfActive();
@@ -4555,6 +4572,10 @@ function configAddFormHTML(key) {
     <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:10px;padding:8px;background:#0d0f18;border-radius:8px;border:1px solid #2a3050">
       <input type="checkbox" id="new-priority-blocks" style="width:16px;height:16px;cursor:pointer;accent-color:#ef4444"/>
       <span style="font-size:13px;color:#f1f5f9">🔒 Esta prioridad bloquea al cliente (no se le podrán generar pedidos nuevos)</span>
+    </label>
+    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:10px;padding:8px;background:#0d0f18;border-radius:8px;border:1px solid #2a3050">
+      <input type="checkbox" id="new-priority-exclroute" style="width:16px;height:16px;cursor:pointer;accent-color:#f59e0b"/>
+      <span style="font-size:13px;color:#f1f5f9">🚫 Excluir de la generación automática de rutas</span>
     </label>
     <button class="bg" style="width:100%;margin-bottom:10px" onclick="addPriorityItem()">✔ Agregar Prioridad</button>`;
   if (key === 'families') return `
@@ -5037,7 +5058,7 @@ function generateRouteOrders(rid, routeTitle, selDepts, selMuns, selRutas) {
   if (selDepts && selDepts.length) clis = clis.filter(c => selDepts.map(Number).includes(Number(c.deptId)));
   if (selMuns  && selMuns.length)  clis = clis.filter(c => selMuns.map(Number).includes(Number(c.municipioId)));
   // Excluir clientes marcados para no incluirse en la generación automática de rutas
-  clis = clis.filter(c => c.excludeFromAutoRoute !== true && !isClientBlocked(c));
+  clis = clis.filter(c => !c.isProspect && !isClientBlocked(c) && !isPriorityExcludedFromRoute(c.priority));
 
   if (!clis.length) {
     toast("⚠️ No hay clientes que coincidan con los filtros seleccionados.", "#f59e0b");
@@ -6289,7 +6310,7 @@ ${(()=>{
   cliOrds.forEach(o=>{
     const tot = orderTotal(o.items,o.clientId);
     const disp = o.applyIva?tot*1.12:tot;
-    const sCls = o.cancelled?'#ef4444':o.status==='Concluido'?'#4ade80':o.status==='Confirmado'?'#60a5fa':'#f1f5f9';
+    const sCls = o.cancelled?'#ef4444':isOrderBlocked(o)?'#a855f7':o.status==='Concluido'?'#4ade80':o.status==='Confirmado'?'#60a5fa':'#f1f5f9';
     const itemsHtml = o.items.map(it=>{
       const p = S.products.find(x=>x.id===it.productId);
       if (!p) return '';
@@ -6312,6 +6333,7 @@ ${(()=>{
     const _isInherited = Number(o.clientId) !== Number(c.id);
     const rowHtml = `<div data-cli-oid="${o.id}" style="background:#161929;border-radius:8px;padding:8px 10px;margin-bottom:8px;border-left-width:3px;border-left-style:solid;border-left-color:${sCls};touch-action:pan-y">
       ${_isInherited?`<div style="font-size:10px;color:#a855f7;font-weight:700;margin-bottom:4px">📁 Cuenta anterior</div>`:''}
+      ${isOrderBlocked(o)?`<div style="font-size:10px;color:#a855f7;font-weight:700;margin-bottom:4px">🔒 Bloqueado (fecha futura)</div>`:''}
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">
         <div style="display:flex;align-items:center;gap:6px">
           <input type="checkbox" class="cli-ord-chk" data-cid="${c.id}" data-oid="${o.id}" onchange="updateCliOrdSummary(${c.id})"
@@ -8952,10 +8974,6 @@ document.getElementById("cc-"+id).innerHTML =
 '<option value="">— Sin ruta —</option>' +
 [...(S.rutasCliente||[])].sort((a,b)=>a.name.localeCompare(b.name,'es')).map(r=>'<option value="'+r.id+'"'+(c.rutaClienteId===r.id?' selected':'')+'>'+r.name+'</option>').join('') +
 '</select>' +
-'<label style="display:flex;align-items:center;gap:8px;font-size:13px;color:#f1f5f9;margin-bottom:10px;cursor:pointer">' +
-'<input type="checkbox" id="ecautoroute-'+id+'" '+(c.excludeFromAutoRoute?'':'checked')+' style="width:16px;height:16px;accent-color:#10b981"/>' +
-'🚚 Incluir en generación automática de rutas' +
-'</label>' +
 '<label class="lbl">🏛️ Departamento</label>' +
 '<div style="position:relative;margin-bottom:10px">' +
 '<input id="ecdl-'+id+'" class="inp" style="margin-bottom:0" placeholder="Buscar departamento..." value="'+(curDept?curDept.name:'')+'" autocomplete="off" oninput="cliFieldSearch(\'dept\','+id+',this.value)" onfocus="cliFieldSearch(\'dept\','+id+',this.value)"/>' +
@@ -9098,8 +9116,6 @@ c.deptId     = selDept ? Number(selDept) : null;
 c.municipioId= selMun  ? Number(selMun)  : null;
   const selRoute = document.getElementById('ecr-'+id)?.value;
   c.rutaClienteId = selRoute ? Number(selRoute) : null;
-  const autoRouteChk = document.getElementById('ecautoroute-'+id);
-  c.excludeFromAutoRoute = autoRouteChk ? !autoRouteChk.checked : false;
 save();
 if (c.isProspect) {
   toast("✔ Prospecto actualizado");
@@ -10756,7 +10772,7 @@ function renderRoutes() {
     const ordRows = orderedOrders.length ? orderedOrders.map((o, rIdx) => {
       const oTot = orderTotal(o.items,o.clientId);
       const oDisp = o.applyIva ? oTot*1.12 : oTot;
-      const statusColor = o.status==='Concluido'?'#4ade80':o.status==='Confirmado'?'#60a5fa':'#f1f5f9';
+      const statusColor = isOrderBlocked(o)?'#a855f7':o.status==='Concluido'?'#4ade80':o.status==='Confirmado'?'#60a5fa':'#f1f5f9';
       const items = o.items.map(it=>{
         const p=S.products.find(x=>x.id===(it.productId||Number(it.pid)));
         return `<span style="font-size:11px;color:#94a3b8">• ${p?p.name:'—'} ×${it.qty}</span>`;
@@ -10789,8 +10805,9 @@ function renderRoutes() {
               ${(window._routeSel[r.id]||new Set()).has(o.id)?'checked':''}
               onclick="event.stopPropagation();toggleRouteOrdSel(${r.id},${o.id},this.checked)"/>
             <div style="display:flex;flex-direction:column;min-width:0">
-              <div><span style="font-size:13px;font-weight:700;color:#f1f5f9">#${rIdx+1} </span><span style="font-size:13px;font-weight:700;color:${clientNameColor(o.status)};cursor:pointer;text-decoration:underline" onclick="event.stopPropagation();openClientCard(${o.clientId})">${o.clientName}</span></div>
+              <div><span style="font-size:13px;font-weight:700;color:#f1f5f9">#${rIdx+1} </span><span style="font-size:13px;font-weight:700;color:${clientNameColor(o)};cursor:pointer;text-decoration:underline" onclick="event.stopPropagation();openClientCard(${o.clientId})">${o.clientName}</span></div>
               <div style="font-size:10px;color:#64748b;margin-top:2px">${fmtOrdDate(o.date)}${o.quote?' · Cot: '+o.quote:''}${o.oc?' · Orden: '+o.oc:''}</div>
+              ${isOrderBlocked(o)?`<div style="font-size:10px;color:#a855f7;font-weight:700">🔒 Bloqueado (fecha futura)</div>`:''}
             </div>
           </div>
           <div style="display:flex;align-items:center;gap:5px;flex-shrink:0">
