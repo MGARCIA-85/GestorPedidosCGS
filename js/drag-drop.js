@@ -39,7 +39,6 @@ if (!dragged) return; dragged.classList.remove('dragging'); saveOrder(container,
 
 function saveOrder(container, type) {
 const ids = [...container.querySelectorAll('.sortable-item')].map(el => Number(el.dataset.id));
-if (type==='clients') S.clients.sort((a,b) => ids.indexOf(Number(a.id))-ids.indexOf(Number(b.id)));
-else                  S.products.sort((a,b) => ids.indexOf(Number(a.id))-ids.indexOf(Number(b.id)));
+S.products.sort((a,b) => ids.indexOf(Number(a.id))-ids.indexOf(Number(b.id)));
 save();
 }
