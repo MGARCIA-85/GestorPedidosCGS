@@ -279,7 +279,7 @@ function fmtDDMMYYYY(d) {
 <button onclick="location.reload()" style="background:none;border:1px solid #2a3050;border-radius:8px;padding:6px 10px;color:#94a3b8;font-size:18px;cursor:pointer;flex-shrink:0" title="Actualizar">🔄</button>
 <button onclick="toggleGlobalSearch(event)" style="background:none;border:1px solid #2a3050;border-radius:8px;padding:6px 10px;color:#94a3b8;font-size:18px;cursor:pointer;flex-shrink:0" title="Buscar">🔍</button>
 <button onclick="goTab('config')" style="background:none;border:1px solid #2a3050;border-radius:8px;padding:6px 10px;color:#94a3b8;font-size:18px;cursor:pointer;flex-shrink:0" title="Configuración">⚙️</button>
-<span id="app-version-badge" style="font-size:9px;color:#475569;flex-shrink:0;align-self:center;margin-left:-4px" title="Versión de la app">v625</span>
+<span id="app-version-badge" style="font-size:9px;color:#475569;flex-shrink:0;align-self:center;margin-left:-4px" title="Versión de la app">v626</span>
 <span id="offline-badge" style="font-size:12px;flex-shrink:0;align-self:center;white-space:nowrap;color:#10b981" title="Con señal">🟢</span>
 </div>
 
@@ -6373,7 +6373,6 @@ return `<div class="prow">
 <span style="font-weight:700;color:${col}">${Q(pr)}${hint}${dt}</span>
 </div>`;
 }).join('');
-const dh = clientSortMode==='manual' ? `<span class="drag-handle" title="Arrastrar para reordenar">≡</span>` : '';
 const isCliOpen = !!window._cliOpen[c.id];
 card.innerHTML = `
 <div style="display:flex;justify-content:space-between;align-items:flex-start;cursor:pointer" onclick="toggleCli(${c.id})">
@@ -6382,7 +6381,6 @@ card.innerHTML = `
   style="width:17px;height:17px;flex-shrink:0;cursor:pointer;accent-color:#10b981;margin-top:2px"
   ${(window._cliSel||new Set()).has(c.id)?'checked':''}
   onclick="event.stopPropagation();toggleCliSel(${c.id},this.checked)"/>
-${dh}
 <div>
 <div style="font-weight:800;font-size:15px;${priorityNameStyle(c.priority,'#f1f5f9')}">${c.name}</div>
 ${(()=>{ const _replacement = S.clients.find(x=>x.linkedFromClientId===c.id); return _replacement?`<div onclick="event.stopPropagation();openClientCard(${_replacement.id})" style="font-size:11px;color:#a855f7;font-weight:700;margin-top:1px;cursor:pointer;text-decoration:underline">🔗 Reemplazado por: ${_replacement.name}</div>`:''; })()}
@@ -6768,7 +6766,6 @@ ${(()=>{
 </div>`;
 body.appendChild(card);
 });
-if (clientSortMode==='manual') setupDrag(body,'clients');
 setTimeout(() => {
   document.querySelectorAll('[data-cli-oid]').forEach(el => {
     if (!el.dataset.swipeInit) {
