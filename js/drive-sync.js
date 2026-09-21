@@ -843,3 +843,18 @@ function initDrive() {
   renderDriveStatus();
   if (_driveToken && !pending) checkRemoteSyncStatus();
 }
+
+// Muestra el estado del respaldo (Drive + local) en la pantalla de Configuración
+function renderBackup() {
+const el = document.getElementById('last-bk');
+if (el) el.textContent = S.lastBk ? '📅 Último respaldo: '+S.lastBk : 'Último respaldo: nunca';
+const sel = document.getElementById('auto-bk-interval');
+if (sel) sel.value = String(S.autoBkInterval || 60);
+const st = document.getElementById('auto-bk-status');
+if (st) {
+  try {
+    const meta = JSON.parse(localStorage.getItem(AUTO_BK_META) || 'null');
+    st.textContent = meta ? '✅ Guardado: '+meta.date+' ('+meta.size+')' : 'Sin respaldo automático aún.';
+  } catch(e) { st.textContent = ''; }
+}
+}
