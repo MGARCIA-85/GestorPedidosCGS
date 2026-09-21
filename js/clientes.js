@@ -2180,3 +2180,149 @@ function showPriceListDoc(cid) {
   };
 }
 
+
+
+// ── Prospectos y ficha flotante de cliente (trasladado desde Pedidos) ──
+function openProspectFullCard(id) {
+  goTab('clients');
+  setTimeout(() => {
+    window._cliOpen = window._cliOpen || {};
+    Object.keys(window._cliOpen).forEach(k => { window._cliOpen[k] = false; });
+    window._cliOpen[id] = true;
+    window._floatCid = Number(id);
+    renderClients();
+    setTimeout(() => restoreFloatingCard(id), 150);
+  }, 150);
+}
+
+function deleteProspect(id) {
+  const hasOrders = S.orders.some(o => Number(o.clientId) === id);
+  const sub = hasOrders ? 'Este prospecto tiene cotizaciones asociadas. Se eliminarán también.' : 'Esta acción no se puede deshacer.';
+  askConfirm('¿Eliminar este prospecto?', sub, () => {
+    S.orders = S.orders.filter(o => Number(o.clientId) !== id);
+    S.clients = S.clients.filter(c => c.id !== id);
+    delete S.cp[id];
+    save();
+    renderProspects();
+    toast('🗑 Prospecto eliminado');
+  });
+}
+
+function convertProspectToClient(id) {
+  const c = S.clients.find(x=>x.id===id);
+  if (!c) return;
+  askConfirm('✅ Convertir en cliente', `"${c.name}" pasará a formar parte de tu catálogo de clientes normal, junto con todas sus cotizaciones (que pasarán a ser pedidos).`, () => {
+    delete c.isProspect;
+    save();
+    toast('✅ Cliente convertido: ' + c.name, '#10b981');
+    goTab('clients');
+  }, 'Convertir', '#10b981', '✅');
+}
+
+function renderProspects() {
+  const body = document.getElementById('prospects-body');
+  const titleTop = document.getElementById('prospects-title-top');
+  if (!body) return;
+  const prospects = S.clients.filter(c => c.isProspect);
+  if (titleTop) titleTop.textContent = `(${prospects.length})`;
+  if (!prospects.length) {
+    body.innerHTML = '<div style="text-align:center;color:#64748b;padding:30px 10px;font-size:13px">Aún no tienes prospectos.<br>Presiona "+ Nuevo" para agregar el primero.</div>';
+    return;
+  }
+  body.innerHTML = prospects.map(c => {
+    const cliOrders = [...S.orders].filter(o => Number(o.clientId) === c.id);
+    const total = cliOrders.reduce((s,o) => s + orderTotal(o.items, o.clientId), 0);
+    return `<div class="card" id="cc-${c.id}">
+<div style="display:flex;justify-content:space-between;align-items:flex-start;cursor:pointer" onclick="openProspectFullCard(${c.id})">
+<div style="display:flex;align-items:center;gap:6px">
+<input type="checkbox" class="cli-chk" data-id="${c.id}"
+  style="width:17px;height:17px;flex-shrink:0;cursor:pointer;accent-color:#10b981;margin-top:2px"
+  ${(window._cliSel||new Set()).has(c.id)?'checked':''}
+  onclick="event.stopPropagation();toggleCliSel(${c.id},this.checked)"/>
+<div>
+<div style="font-weight:800;font-size:15px;${priorityNameStyle(c.priority,'#f1f5f9')}">${c.name}</div>
+${c.clientCode ? `<div style="font-size:12px;color:#64748b">🆔 ${c.clientCode}</div>` : ''}
+${c.priority ? `<div style="font-size:12px;color:#f59e0b">⭐ ${c.priority}</div>` : ''}
+${c.phone   ? `<div style="font-size:12px;color:#64748b">📞 ${c.phone}</div>` : ''}
+${c.deptId ? (()=>{ const cat=(S.depts||[]).find(x=>x.id===c.deptId); return cat?`<div style="font-size:10px;display:inline-block;background:#1e3a5f;color:#60a5fa;padding:1px 8px;border-radius:8px;margin-top:2px">🏛️ ${cat.name}</div>`:''; })() : ''}
+${c.municipioId ? (()=>{ const m=(S.municipios||[]).find(x=>x.id===c.municipioId); return m?`<div style="font-size:10px;display:inline-block;background:#1e1040;color:#a78bfa;padding:1px 8px;border-radius:8px;margin-top:2px;margin-left:3px">🏘️ ${m.name}</div>`:''; })() : ''}
+${c.address ? `<div style="font-size:12px;color:#64748b">📍 ${c.address}</div>` : ''}
+</div>
+</div>
+<div style="display:flex;gap:6px;flex-shrink:0;align-items:center" onclick="event.stopPropagation()">
+<button class="bg" style="font-size:11px;padding:4px 10px" onclick="convertProspectToClient(${c.id})">✅ Convertir</button>
+<button class="br" onclick="deleteProspect(${c.id})">🗑</button>
+</div>
+</div>
+<div style="font-size:11px;color:#64748b;margin-top:6px" onclick="openProspectFullCard(${c.id})">${cliOrders.length} cotización(es)${total>0?' · '+Q(total):''}</div>
+</div>`;
+  }).join('');
+}
+
+function openNewProspectForm() {
+  goTab('clients');
+  setTimeout(() => {
+    const cliForm = document.getElementById('cli-form-body');
+    if (cliForm) cliForm.style.display = 'block';
+    refreshNcRouteList();
+    const typeProspectEl = document.getElementById('nc-type-prospect');
+    if (typeProspectEl) typeProspectEl.checked = true;
+    const nameField = document.getElementById('nc-n');
+    if (nameField) { nameField.scrollIntoView({behavior:'smooth', block:'center'}); }
+    // Refuerzo: asegurar que la lista de rutas quede cargada, aunque la primera vez llegue demasiado pronto
+    setTimeout(refreshNcRouteList, 200);
+  }, 150);
+}
+
+function openClientCard(cid) {
+  if (!window._cliOpen) window._cliOpen = {};
+  closeFloatingCard();
+  Object.keys(window._cliOpen).forEach(k => { window._cliOpen[k] = false; });
+  window._cliOpen[Number(cid)] = true;
+  window._floatCid = Number(cid);
+  goTab('clients');
+  setTimeout(() => {
+    renderClients();
+    setTimeout(() => restoreFloatingCard(cid), 150);
+  }, 100);
+}
+
+function closeFloatingCard() {
+  const cid = window._floatCid;
+  window._floatCid = null;
+  if (cid && window['_restProdOutsideHandler_'+cid]) closeRestProdList(cid);
+
+  // Colapsar ficha del cliente
+  if (cid && window._cliOpen) window._cliOpen[cid] = false;
+
+  // Colapsar todas las secciones internas
+  if (cid && window._cliSecOpen) {
+    const prefixes = ['csp','csc','csd','csb','csn','cso'];
+    prefixes.forEach(p => {
+      const secId = `${p}-${cid}`;
+      window._cliSecOpen[secId] = false;
+      const secEl = document.getElementById(secId);
+      if (secEl) secEl.style.display = 'none';
+    });
+  }
+
+  // Restaurar estilos
+  document.querySelectorAll('[id^="cc-"]').forEach(el => {
+    if (el.dataset.floatCid) {
+      el.removeAttribute('style');
+      delete el.dataset.floatCid;
+      const btn = el.querySelector('#float-close-btn');
+      if (btn) btn.remove();
+    }
+    el.style.opacity = '1';
+  });
+
+  // Si el cliente cerrado es un prospecto, regresar a la pestaña de Prospectos
+  const wasProspect = cid && S.clients.find(c=>Number(c.id)===Number(cid) && c.isProspect);
+  if (wasProspect) {
+    goTab('prospects');
+  } else {
+    renderClients();
+  }
+}
+
