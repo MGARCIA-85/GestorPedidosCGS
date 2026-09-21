@@ -1,65 +1,3 @@
-// ═══════════════════════════════════════════════════════
-//  RESPALDO AUTOMÁTICO
-// ═══════════════════════════════════════════════════════
-const AUTO_BK_KEY  = 'gpgt_auto_backup';
-const AUTO_BK_META = 'gpgt_auto_backup_meta';
-let _autoBkTimer = null;
-
-function setAutoBackupInterval(minutes) {
-  if (_autoBkTimer) clearInterval(_autoBkTimer);
-  const mins = Number(minutes);
-  S.autoBkInterval = mins; save();
-  if (mins > 0) {
-    _autoBkTimer = setInterval(runAutoBackup, mins * 60 * 1000);
-    toast('⏱️ Respaldo automático: cada ' + (mins >= 60 ? (mins/60)+'h' : mins+'min'), '#10b981');
-  } else {
-    toast('Respaldo automático desactivado', '#64748b');
-  }
-  renderBackup();
-}
-
-function runAutoBackup() {
-  try {
-    const data = JSON.stringify(S);
-    localStorage.setItem(AUTO_BK_KEY, data);
-    const now = new Date();
-    const meta = { date: nowDateTimeStr(), ts: now.getTime(), size: (data.length/1024).toFixed(1)+'KB' };
-    localStorage.setItem(AUTO_BK_META, JSON.stringify(meta));
-    toast('💾 Respaldo automático guardado', '#10b981');
-    renderBackup();
-  } catch(e) { toast('⚠️ Error en respaldo automático', '#ef4444'); }
-}
-
-function checkAutoBackupDue() {
-  const mins = S.autoBkInterval != null ? Number(S.autoBkInterval) : 60;
-  if (!mins) return;
-  try {
-    const meta = JSON.parse(localStorage.getItem(AUTO_BK_META) || 'null');
-    const lastTs = meta ? meta.ts : 0;
-    const elapsed = (Date.now() - lastTs) / 60000; // minutos
-    if (elapsed >= mins) runAutoBackup();
-  } catch(e) {}
-}
-
-function initAutoBackup() {
-  const mins = S.autoBkInterval != null ? S.autoBkInterval : 60;
-  if (S.autoBkInterval == null) { S.autoBkInterval = 60; save(); }
-  const sel = document.getElementById('auto-bk-interval');
-  if (sel) sel.value = String(mins);
-  if (_autoBkTimer) clearInterval(_autoBkTimer);
-  if (mins > 0) {
-    // Timer de respaldo cada minuto que verifica si ya pasó el intervalo
-    _autoBkTimer = setInterval(checkAutoBackupDue, 60 * 1000);
-    // Verificar inmediatamente al arrancar
-    checkAutoBackupDue();
-  }
-  // Verificar también al retomar visibilidad (app vuelve al fondo)
-  document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') checkAutoBackupDue();
-  });
-  renderBackup();
-}
-
 function exportClientsExcel() {
 const rows = S.clients.map(c => {
   const dept = (S.depts||[]).find(d=>d.id===c.deptId);
@@ -848,13 +786,4 @@ function initDrive() {
 function renderBackup() {
 const el = document.getElementById('last-bk');
 if (el) el.textContent = S.lastBk ? '📅 Último respaldo: '+S.lastBk : 'Último respaldo: nunca';
-const sel = document.getElementById('auto-bk-interval');
-if (sel) sel.value = String(S.autoBkInterval || 60);
-const st = document.getElementById('auto-bk-status');
-if (st) {
-  try {
-    const meta = JSON.parse(localStorage.getItem(AUTO_BK_META) || 'null');
-    st.textContent = meta ? '✅ Guardado: '+meta.date+' ('+meta.size+')' : 'Sin respaldo automático aún.';
-  } catch(e) { st.textContent = ''; }
-}
 }
