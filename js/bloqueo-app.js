@@ -1,3 +1,5 @@
+const LOCK_KEY      = 'cgs_app_password';
+const ACT_CODE_KEY  = 'cgs_activation_code';
 const ACT_EXP_KEY   = 'cgs_activation_expiry';
 const SESSION_KEY   = 'cgs_session_active';
 
