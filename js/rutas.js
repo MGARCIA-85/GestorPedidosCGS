@@ -909,3 +909,224 @@ ${rows}
   setTimeout(() => URL.revokeObjectURL(url), 10000);
 }
 
+
+
+// ── Trasladado desde el bloque "MODAL DE CONFIRMACIÓN" (mal etiquetado) ──
+function renderGenRutaChips() {
+  const wrap = document.getElementById('gen-ruta-checks');
+  if (!wrap) return;
+  wrap.innerHTML = (S.rutasCliente || []).map(r => `
+    <label style="display:flex;align-items:center;gap:5px;background:#0d2010;border:1px solid #1a3a1a;border-radius:8px;padding:5px 10px;cursor:pointer;font-size:13px;color:#f1f5f9">
+      <input type="checkbox" class="gen-ruta-cb" value="${r.id}" style="accent-color:#10b981"/> ${r.name}
+    </label>`).join('');
+}
+
+function renderGenChips(type) {
+  const wrap = document.getElementById('gen-'+type+'-checks');
+  if (!wrap) return;
+  const q    = (document.getElementById('gen-'+type+'-search')?.value||'').toLowerCase();
+  const list = type==='dept' ? (S.depts||[]) : (S.municipios||[]);
+  const cls  = 'gen-'+type+'-cb';
+  const col  = type==='dept' ? '#10b981' : '#7c3aed';
+  const bg   = type==='dept' ? '#0d1f0d' : '#0d0d1f';
+  const bdr  = type==='dept' ? '#1a3a1a' : '#1a1a3a';
+  if (!list.length) { wrap.innerHTML='<span style="font-size:11px;color:#64748b">Sin '+(type==='dept'?'departamentos':'sectores')+' creados</span>'; return; }
+  // Mantener estado de checks existentes antes de re-render
+  const checked = new Set([...document.querySelectorAll('.'+cls+':checked')].map(cb=>cb.value));
+  const filtered = q ? list.filter(x=>x.name.toLowerCase().includes(q)) : list;
+  wrap.innerHTML = filtered.map(x=>
+    `<label style="display:flex;align-items:center;gap:5px;background:${checked.has(String(x.id))?col+'33':bg};border:1px solid ${checked.has(String(x.id))?col:bdr};border-radius:8px;padding:6px 10px;cursor:pointer;font-size:12px;color:#f1f5f9;transition:all .15s" onclick="this.querySelector('input').checked=!this.querySelector('input').checked;this.style.background=this.querySelector('input').checked?'${col}33':'${bg}';this.style.borderColor=this.querySelector('input').checked?'${col}':'${bdr}'">
+      <input type="checkbox" class="${cls}" value="${x.id}" ${checked.has(String(x.id))?'checked':''} style="width:15px;height:15px;accent-color:${col};pointer-events:none"/> ${x.name}
+    </label>`
+  ).join('');
+}
+
+function filterGenChips(type) { renderGenChips(type); }
+
+
+function toggleGenSection(bodyId, arrowId) {
+  const body = document.getElementById(bodyId);
+  const arrow = document.getElementById(arrowId);
+  if (!body) return;
+  const open = body.style.display !== 'none';
+  body.style.display = open ? 'none' : 'block';
+  if (arrow) arrow.textContent = open ? '▼' : '▲';
+}
+
+function generateRouteOrdersFromPanel() {
+  const routeName = document.getElementById('gen-route-name')?.value.trim();
+  const selDepts = [...document.querySelectorAll('.gen-dept-cb:checked')].map(cb => Number(cb.value));
+  const selMuns  = [...document.querySelectorAll('.gen-mun-cb:checked')].map(cb => Number(cb.value));
+  const selRutas = [...document.querySelectorAll('.gen-ruta-cb:checked')].map(cb => Number(cb.value));
+
+  if (!routeName) { toast('Escribe el nombre de la nueva ruta', '#f59e0b'); return; }
+
+  if (!S.routes) S.routes = [];
+  if (!S.nextRid) S.nextRid = (S.routes.length ? Math.max(...S.routes.map(r=>r.id)) + 1 : 1);
+  const newRoute = { id: S.nextRid++, name: routeName, orders: [] };
+  S.routes.push(newRoute);
+
+  generateRouteOrders(newRoute.id, routeName, selDepts, selMuns, selRutas);
+  document.getElementById('gen-route-name').value = '';
+}
+
+function generateRouteOrders(rid, routeTitle, selDepts, selMuns, selRutas) {
+  const r = S.routes.find(x => x.id === rid);
+  if (!r) return;
+
+  let clis = [...S.clients];
+  if (selRutas && selRutas.length) clis = clis.filter(c => selRutas.includes(Number(c.rutaClienteId)));
+  if (selDepts && selDepts.length) clis = clis.filter(c => selDepts.map(Number).includes(Number(c.deptId)));
+  if (selMuns  && selMuns.length)  clis = clis.filter(c => selMuns.map(Number).includes(Number(c.municipioId)));
+  // Excluir clientes marcados para no incluirse en la generación automática de rutas
+  clis = clis.filter(c => !c.isProspect && !isClientBlocked(c) && !isPriorityExcludedFromRoute(c.priority));
+
+  if (!clis.length) {
+    toast("⚠️ No hay clientes que coincidan con los filtros seleccionados.", "#f59e0b");
+    return;
+  }
+
+  const msg = "Se crearán " + clis.length + " pedido(s) en Cotización para la ruta \"" + r.name + "\". ¿Continuar?";
+
+  askConfirm('🚀 Generar pedidos de ruta', msg, () => {
+    if (!r.orders) r.orders = [];
+    const now = nowDateTimeStr();
+
+    clis.forEach(c => {
+      // Todos los pedidos históricos del cliente, ordenados por más reciente
+      const histOrdenes = [...S.orders]
+        .filter(o => Number(o.clientId) === c.id)
+        .sort((a,b) => { const td = ordDateTs(b)-ordDateTs(a); return td !== 0 ? td : b.id-a.id; });
+
+      // Construir lista de productos únicos de TODO el historial del cliente
+      // Para cada producto, usar el precio más reciente
+      const productMap = new Map(); // productId → item
+      // Recorrer pedidos del más antiguo al más reciente para que el precio reciente sobreescriba
+      [...histOrdenes].reverse().forEach(o => {
+        (o.items || []).forEach(it => {
+          const pid = it.productId || it.pid;
+          productMap.set(String(pid), { ...it, productId: Number(pid) });
+        });
+      });
+      const items = [...productMap.values()];
+
+      // Configuración IVA del último pedido
+      const lastOrd = histOrdenes[0];
+      const applyIva      = lastOrd?.applyIva      || false;
+      const pricesIncIva  = lastOrd?.pricesIncIva  || false;
+
+      // Comentarios anclados del cliente
+      const pinnedComs = (S.savedComments && S.savedComments[c.id]) || [];
+      const comments   = Array.isArray(pinnedComs) ? [...pinnedComs] : [];
+
+      // Dirección de entrega: solo precargar si tiene exactamente una dirección sin favorita
+      const _cliAddrs = (S.savedAddresses && S.savedAddresses[c.id]) || [];
+      const _defIdx = S.defaultAddresses && S.defaultAddresses[c.id] !== undefined ? S.defaultAddresses[c.id] : null;
+      let delivery = '';
+      if (_defIdx === null && _cliAddrs.length === 1) {
+        delivery = _cliAddrs[0]; // Solo una dirección → precargar
+      }
+      // Si tiene favorita o varias → dejar vacío para confirmar al editar
+
+      const newOrd = {
+        id:          genId(),
+        clientId:    c.id,
+        clientName:  c.name,
+        items,
+        bonusLines:  [],
+        status:      'Cotización',
+        date:        now,
+        routeId:     rid,
+        routeTitle:  routeTitle || '',
+        applyIva,
+        pricesIncIva,
+        quote:       '',
+        oc:          '',
+        delivery,
+        comments
+      };
+      S.orders.push(newOrd);
+      r.orders.push(newOrd.id);
+    });
+
+    save();
+    renderRoutes();
+    window._routeOpen[rid] = true;
+    renderRoutes();
+    const ti = document.getElementById('gen-route-title');
+    if (ti) ti.value = '';
+    collapseForm('gen-route-body');
+    toast('✅ ' + clis.length + ' pedido(s) generados en Cotización', '#10b981');
+  }, '🚀 Generar', '#10b981');
+}
+
+function deleteRoute(rid) {
+  const r = S.routes.find(x => x.id === rid); if (!r) return;
+  if (!r.orders) r.orders = [];
+  const n = r.orders.length;
+  const inner = document.querySelector('#confirm-modal > div');
+  if (!inner) return;
+  inner.innerHTML = `
+    <div style="font-size:28px;margin-bottom:8px">🚚</div>
+    <div style="font-size:15px;font-weight:700;color:#f1f5f9;margin-bottom:6px">Eliminar ruta "${r.name}"</div>
+    <div style="font-size:12px;color:#94a3b8;margin-bottom:18px">${n} pedido(s) en esta ruta. ¿Qué hacer con ellos?</div>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <button onclick="confirmDel(false)" style="padding:10px;border-radius:9px;border:1px solid #475569;background:transparent;color:#f1f5f9;font-weight:700;cursor:pointer;font-size:13px">Cancelar</button>
+      <button onclick="window._routeDelCb('unlink')" style="padding:10px;border-radius:9px;border:none;background:#3b82f6;color:#fff;font-weight:800;cursor:pointer;font-size:13px">🔗 Solo desvincular pedidos (los conserva)</button>
+      <button onclick="window._routeDelCb('delete')" style="padding:10px;border-radius:9px;border:none;background:#ef4444;color:#fff;font-weight:800;cursor:pointer;font-size:13px">🗑 Eliminar ruta Y pedidos</button>
+    </div>`;
+  document.getElementById('confirm-modal').style.display = 'flex';
+  window._routeDelCb = (action) => {
+    document.getElementById('confirm-modal').style.display = 'none';
+    inner.innerHTML = ''; // reset para próximo uso
+    if (action === 'unlink') {
+      r.orders.forEach(oid => { const o = S.orders.find(x=>x.id===oid); if (o) { delete o.routeId; delete o.routeTitle; } });
+    } else if (action === 'delete') {
+      r.orders.forEach(oid => { S.orders = S.orders.filter(x=>x.id!==oid); });
+    }
+    S.routes = S.routes.filter(x => x.id !== rid);
+    save(); renderRoutes(); toast('🗑 Ruta eliminada');
+  };
+}
+
+function removeOrderFromRoute(oid, rid) {
+  const inner = document.querySelector('#confirm-modal > div');
+  if (!inner) return;
+  const _o = S.orders.find(x=>x.id===oid);
+  const _cliName = _o ? _o.clientName : '—';
+  const _prodDesc = _o ? _o.items.map(it=>{const p=S.products.find(x=>x.id===(it.productId||Number(it.pid)));return (p?p.name:'—')+' ×'+it.qty;}).join(', ') : '';
+  const _tot = _o ? Q(_o.applyIva ? orderTotal(_o.items,_o.clientId)*1.12 : orderTotal(_o.items,_o.clientId)) : '';
+  inner.innerHTML = `
+    <div style="font-size:28px;margin-bottom:8px">📦</div>
+    <div style="font-size:15px;font-weight:700;color:#f1f5f9;margin-bottom:4px">Quitar pedido de la ruta</div>
+    <div style="font-size:13px;font-weight:700;color:#f59e0b;margin-bottom:2px">${_cliName}</div>
+    <div style="font-size:11px;color:#94a3b8;margin-bottom:2px">${_prodDesc}</div>
+    <div style="font-size:12px;color:#4ade80;margin-bottom:14px">${_tot}</div>
+    <div style="font-size:12px;color:#94a3b8;margin-bottom:14px">¿Qué deseas hacer con este pedido?</div>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <button onclick="confirmDel(false)" style="padding:10px;border-radius:9px;border:1px solid #475569;background:transparent;color:#f1f5f9;font-weight:700;cursor:pointer;font-size:13px">Cancelar</button>
+      <button onclick="window._ordRouteCb('unlink')" style="padding:10px;border-radius:9px;border:none;background:#3b82f6;color:#fff;font-weight:800;cursor:pointer;font-size:13px">🔗 Solo desvincular (conservar pedido)</button>
+      <button onclick="window._ordRouteCb('delete')" style="padding:10px;border-radius:9px;border:none;background:#ef4444;color:#fff;font-weight:800;cursor:pointer;font-size:13px">🗑 Eliminar pedido por completo</button>
+    </div>`;
+  document.getElementById('confirm-modal').style.display = 'flex';
+  window._ordRouteCb = (action) => {
+    document.getElementById('confirm-modal').style.display = 'none';
+    inner.innerHTML = '';
+    const r = S.routes.find(x=>x.id===rid);
+    if (r) r.orders = (r.orders||[]).filter(x=>x!==oid);
+    if (action === 'unlink') {
+      const o = S.orders.find(x=>x.id===oid);
+      if (o) { delete o.routeId; delete o.routeTitle; }
+    } else if (action === 'delete') {
+      S.orders = S.orders.filter(x=>x.id!==oid);
+    }
+    save(); renderRoutes(); toast(action==='delete'?'🗑 Pedido eliminado':'Pedido desvinculado de la ruta');
+  };
+}
+
+function openQuoteFromRoute(oid) {
+  const o = S.orders.find(x => x.id === oid);
+  if (!o) return;
+  showQuote(o);
+}
+

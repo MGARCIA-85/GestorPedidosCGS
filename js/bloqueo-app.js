@@ -183,3 +183,51 @@ function refreshActivationInfo() {
     el.style.color = '#10b981';
   }
 }
+
+
+// ── Trasladado desde el bloque "MODAL DE CONFIRMACIÓN" (mal etiquetado) ──
+function showChangeCodePanel() {
+  const panel = document.getElementById('change-code-panel');
+  if (!panel) return;
+  panel.style.display = panel.style.display === 'none' ? 'flex' : 'none';
+  document.getElementById('change-code-error').style.display = 'none';
+  document.getElementById('change-code-input').value = '';
+}
+
+async function applyNewCode() {
+  const input = document.getElementById('change-code-input').value.trim().toUpperCase();
+  const errEl = document.getElementById('change-code-error');
+  const btn   = document.querySelector('#change-code-panel button');
+  if (!input) return;
+
+  if (btn) { btn.textContent = 'Verificando...'; btn.disabled = true; }
+  errEl.style.display = 'none';
+
+  try {
+    let resultado = { valido: false };
+    if (window._verificarCodigoFirebase) {
+      resultado = await window._verificarCodigoFirebase(input);
+    } else {
+      const LOCAL = { 'GESTPCGS9379':36500, 'GEST365CGS88':365, 'CGS90GEST234':90, 'PRUEBA1CGS30':30 };
+      if (LOCAL[input] !== undefined) resultado = { valido: true, dias: LOCAL[input] };
+    }
+
+    if (resultado.valido) {
+      const dias   = Number(resultado.dias);
+      const expiry = dias >= 36500 ? 9999999999999 : Date.now() + dias * 24 * 60 * 60 * 1000;
+      localStorage.setItem(ACT_CODE_KEY, input);
+      localStorage.setItem(ACT_EXP_KEY, String(expiry));
+      localStorage.setItem('cgs_act_dias', String(dias));
+      document.getElementById('change-code-panel').style.display = 'none';
+      document.getElementById('change-code-input').value = '';
+      refreshActivationInfo();
+      const msg = dias >= 36500 ? '✅ Código actualizado — Acceso de por vida' : '✅ Código actualizado — ' + dias + ' días';
+      toast(msg, '#10b981');
+    } else {
+      errEl.style.display = 'block';
+    }
+  } finally {
+    if (btn) { btn.textContent = '✅ Activar nuevo código'; btn.disabled = false; }
+  }
+}
+

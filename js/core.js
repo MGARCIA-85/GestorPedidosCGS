@@ -471,3 +471,44 @@ history.replaceState({ tab: 'list' }, '', '#list');
 
 
 
+
+
+// ── Trasladado desde el bloque "MODAL DE CONFIRMACIÓN" (mal etiquetado) ──
+let _confirmCb = null;
+function askConfirm(msg, sub, cb, btnText, btnColor, icon) {
+  const inner = document.querySelector('#confirm-modal > div');
+  if (inner && !document.getElementById('confirm-msg')) {
+    inner.innerHTML = `
+      <div id="confirm-icon" style="font-size:28px;margin-bottom:8px">🗑</div>
+      <div id="confirm-msg" style="font-size:15px;font-weight:700;color:#f1f5f9;margin-bottom:6px"></div>
+      <div id="confirm-sub" style="font-size:12px;color:#94a3b8;margin-bottom:18px"></div>
+      <div style="display:flex;gap:10px">
+        <button onclick="confirmDel(false)" style="flex:1;padding:10px;border-radius:9px;border:1px solid #475569;background:transparent;color:#f1f5f9;font-weight:700;cursor:pointer;font-size:14px">Cancelar</button>
+        <button id="confirm-ok-btn" onclick="confirmDel(true)" style="flex:1;padding:10px;border-radius:9px;border:none;background:#ef4444;color:#fff;font-weight:800;cursor:pointer;font-size:14px">Eliminar</button>
+      </div>`;
+  }
+  document.getElementById('confirm-msg').textContent = msg;
+  document.getElementById('confirm-sub').textContent = sub || '';
+  const btn = document.getElementById('confirm-ok-btn');
+  if (btn) { btn.textContent = btnText || 'Eliminar'; btn.style.background = btnColor || '#ef4444'; }
+  const iconEl = document.getElementById('confirm-icon');
+  if (iconEl) iconEl.textContent = icon || '🗑';
+  document.getElementById('confirm-modal').style.display = 'flex';
+  _confirmCb = cb;
+}
+
+function bonusAlertConfirm() { if (window._bonusAlertConfirmCb) window._bonusAlertConfirmCb(); window._bonusAlertConfirmCb=null; window._bonusAlertCancelCb=null; }
+function bonusAlertCancel()  { if (window._bonusAlertCancelCb)  window._bonusAlertCancelCb();  window._bonusAlertConfirmCb=null; window._bonusAlertCancelCb=null; }
+
+function bonusAlertCancel()  { if (window._bonusAlertCancelCb)  window._bonusAlertCancelCb();  window._bonusAlertConfirmCb=null; window._bonusAlertCancelCb=null; }
+
+
+function confirmDel(yes) {
+  document.getElementById('confirm-modal').style.display = 'none';
+  const btn = document.getElementById('confirm-ok-btn');
+  if (btn) { btn.style.background='#ef4444'; btn.textContent='Eliminar'; }
+  if (yes && _confirmCb) _confirmCb();
+  _confirmCb = null;
+  window._bonusOnCancel = null;
+}
+

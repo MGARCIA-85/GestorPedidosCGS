@@ -2326,3 +2326,21 @@ function closeFloatingCard() {
   }
 }
 
+
+
+// ── Trasladado desde el bloque "MODAL DE CONFIRMACIÓN" (mal etiquetado) ──
+function delClient(id) {
+  id = Number(id);
+  const c = S.clients.find(x => Number(x.id)===id);
+  const nombre = c ? c.name : '—';
+  const hasOrders = S.orders.some(o => Number(o.clientId)===id);
+  const ordCount = S.orders.filter(o => Number(o.clientId)===id).length;
+  const sub = nombre + (hasOrders ? '\n⚠️ Tiene ' + ordCount + ' pedido(s) activo(s) que también se eliminarán.' : '\nEsta acción no se puede deshacer.');
+  askConfirm('¿Eliminar este cliente?', sub, () => {
+    S.orders = S.orders.filter(o => Number(o.clientId)!==id);
+    S.clients = S.clients.filter(c => Number(c.id)!==id);
+    delete S.cp[id]; delete S.cp[String(id)];
+    save(); toast('🗑 Cliente eliminado'); renderClients(); renderList();
+  });
+}
+

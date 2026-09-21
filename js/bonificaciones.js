@@ -1956,3 +1956,103 @@ function checkBonusAlert(cid, oid, onDone, extraOrd) {
   };
   return true;
 }
+
+
+// ── Trasladado desde el bloque "MODAL DE CONFIRMACIÓN" (mal etiquetado) ──
+function addPoolEqRow(pid, factor) {
+  const prodOpts = S.products.map(p=>`<option value="${p.id}" ${String(p.id)===String(pid||'')?'selected':''}>${p.name}${p.presentation?' ('+p.presentation+')':''}</option>`).join('');
+  const row = document.createElement('div');
+  row.className = 'br-pooleq-row';
+  row.style.cssText = 'display:flex;gap:5px;align-items:center;margin-bottom:5px';
+  row.innerHTML = `
+    <select class="br-eqpid" style="flex:1;min-width:0;background:#0d0f18;color:#f1f5f9;border:1px solid #2a3050;border-radius:7px;padding:5px;font-size:11px">${prodOpts}</select>
+    <input type="number" class="br-eqfactor" value="${factor||1}" min="0.01" step="0.01" placeholder="Factor" title="1 galón=1, 1 litro=0.5" style="width:70px;background:#0d0f18;color:#f1f5f9;border:1px solid #2a3050;border-radius:7px;padding:5px;font-size:12px"/>
+    <button onclick="this.closest('.br-pooleq-row').remove()" style="background:#ef444420;border:1px solid #ef4444;border-radius:6px;color:#ef4444;padding:3px 7px;font-size:12px;cursor:pointer">x</button>`;
+  document.getElementById('br-pooleq-rows').appendChild(row);
+}
+
+function addMixIndRow(pid, threshold) {
+  const prodOpts = S.products.map(p=>`<option value="${p.id}" ${String(p.id)===String(pid||'')?'selected':''}>${p.name}${p.presentation?' ('+p.presentation+')':''}</option>`).join('');
+  const row = document.createElement('div');
+  row.className = 'br-mix-ind-row';
+  row.style.cssText = 'display:flex;gap:5px;align-items:center;margin-bottom:5px';
+  row.innerHTML = `
+    <select class="br-mix-ind-pid" style="flex:1;min-width:0;background:#0d0f18;color:#f1f5f9;border:1px solid #2a3050;border-radius:7px;padding:5px;font-size:11px">${prodOpts}</select>
+    <input type="number" class="br-mix-ind-thr" value="${threshold||''}" min="1" placeholder="Meta" style="width:70px;background:#0d0f18;color:#f1f5f9;border:1px solid #2a3050;border-radius:7px;padding:5px;font-size:12px"/>
+    <button onclick="this.closest('.br-mix-ind-row').remove()" style="background:#ef444420;border:1px solid #ef4444;border-radius:6px;color:#ef4444;padding:3px 7px;font-size:12px;cursor:pointer">x</button>`;
+  document.getElementById('br-mix-ind-rows').appendChild(row);
+}
+
+function addMixEqRow(pid, factor, unitLabel) {
+  const prodOpts = S.products.map(p=>`<option value="${p.id}" ${String(p.id)===String(pid||'')?'selected':''}>${p.name}${p.presentation?' ('+p.presentation+')':''}</option>`).join('');
+  const row = document.createElement('div');
+  row.className = 'br-mix-eq-row';
+  row.style.cssText = 'display:flex;flex-direction:column;gap:4px;margin-bottom:8px;padding:5px;background:#12162a;border-radius:7px';
+  row.innerHTML = `
+    <div style="display:flex;gap:5px;align-items:center">
+      <select class="br-mix-eq-pid" style="flex:1;min-width:0;background:#0d0f18;color:#f1f5f9;border:1px solid #2a3050;border-radius:7px;padding:5px;font-size:11px">${prodOpts}</select>
+      <input type="number" class="br-mix-eq-factor" value="${factor||1}" min="0.01" step="0.01" placeholder="Factor" style="width:70px;background:#0d0f18;color:#f1f5f9;border:1px solid #2a3050;border-radius:7px;padding:5px;font-size:12px"/>
+      <button onclick="this.closest('.br-mix-eq-row').remove()" style="background:#ef444420;border:1px solid #ef4444;border-radius:6px;color:#ef4444;padding:3px 7px;font-size:12px;cursor:pointer">x</button>
+    </div>
+    <input type="text" class="br-mix-eq-unit" value="${unitLabel||''}" placeholder="Nombre/unidad para el reporte (ej: GALONES, LITROS) — opcional" style="width:100%;background:#0d0f18;color:#94a3b8;border:1px solid #2a3050;border-radius:6px;padding:4px 6px;font-size:11px"/>`;
+  document.getElementById('br-mix-eq-rows').appendChild(row);
+}
+
+function addMixPoolRow(pid) {
+  const prodOpts = S.products.map(p=>`<option value="${p.id}" ${String(p.id)===String(pid||'')?'selected':''}>${p.name}${p.presentation?' ('+p.presentation+')':''}</option>`).join('');
+  const row = document.createElement('div');
+  row.className = 'br-mix-pool-row';
+  row.style.cssText = 'display:flex;gap:5px;align-items:center;margin-bottom:5px';
+  row.innerHTML = `
+    <select class="br-mix-pool-pid" style="flex:1;background:#0d0f18;color:#f1f5f9;border:1px solid #2a3050;border-radius:7px;padding:5px;font-size:12px">${prodOpts}</select>
+    <button onclick="this.closest('.br-mix-pool-row').remove()" style="background:#ef444420;border:1px solid #ef4444;border-radius:6px;color:#ef4444;padding:3px 7px;font-size:12px;cursor:pointer">x</button>`;
+  document.getElementById('br-mix-pool-rows').appendChild(row);
+}
+
+function sendBonusOrder(cid, ri) {
+  const _cid = Number(cid);
+  const rules = S.bonuses?.[_cid] || S.bonuses?.[String(_cid)];
+  const r = rules?.[Number(ri)];
+  if (!r) { toast('No se encontró la regla', '#ef4444'); return; }
+  if (!(r.bonusItems||[]).length) { toast('Esta regla no tiene bonificación configurada', '#f59e0b'); return; }
+
+  // Preparar pedido nuevo
+  editingOid = null;
+  ordItems = [{ pid:'', qty:1, price:null }];
+  ordComments = [''];
+  ordConditions = [];
+  // Cargar las líneas de bonificación de la regla, marcadas con la regla de origen
+  ordBonusLines = (r.bonusItems||[]).map(bi => {
+    const p = S.products.find(x=>x.id===Number(bi.productId));
+    return { productId: Number(bi.productId), qty: Number(bi.qty)||1, price: bi.price!=null?bi.price:(p?p.basePrice||0:0), ruleName: r.name||'Bonificación', fromRuleId: Number(ri) };
+  });
+  window._bonusConfirmed = true;
+  window._pendingBonusReset = { cid: _cid, ri: Number(ri) };
+
+  goTab('order');
+  setTimeout(() => {
+    const cli = S.clients.find(c => c.id === _cid);
+    // Asignar cliente en los campos
+    const cliHid = document.getElementById('ord-cli');
+    const cliTxt = document.getElementById('ord-cli-txt');
+    if (cliHid) cliHid.value = _cid;
+    if (cliTxt && cli) cliTxt.value = cli.name;
+    // Mostrar el formulario (igual que en duplicar)
+    const body = document.getElementById('ord-body');
+    const ph   = document.getElementById('ord-ph');
+    const info = document.getElementById('ord-cli-info');
+    if (body) body.style.display = 'block';
+    if (ph)   ph.style.display   = 'none';
+    if (info && cli) info.innerHTML = (cli.phone?'📞 '+cli.phone:'') + (cli.address?' &nbsp;📍 '+cli.address:'');
+    refreshDeliverySel(_cid);
+    setComments(['']);
+    const ivaIncEl = document.getElementById('ord-iva-inc'); if (ivaIncEl) ivaIncEl.checked = true;
+    renderItems();
+    renderOrdBonusRows();
+    renderConditionFields();
+    refreshTotalWithIVA();
+    onDeliveryInputChange();
+    toast('🎁 Bonificación cargada — completa y guarda el pedido','#10b981');
+  }, 300);
+}
+

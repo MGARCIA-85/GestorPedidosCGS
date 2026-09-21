@@ -213,3 +213,30 @@ if (p.family) {
 }
 save(); toast('✔ Producto actualizado'); renderProducts();
 }
+
+
+// ── Trasladado desde el bloque "MODAL DE CONFIRMACIÓN" (mal etiquetado) ──
+function toggleProdActive(id) {
+  id = Number(id);
+  const p = S.products.find(x => Number(x.id)===id);
+  if (!p) return;
+  p.inactive = !p.inactive;
+  save();
+  toast(p.inactive ? '🔒 Producto bloqueado' : '🔓 Producto desbloqueado', p.inactive ? '#f59e0b' : '#10b981');
+  renderProducts();
+}
+
+function delProd(id) {
+  id = Number(id);
+  const p = S.products.find(x => Number(x.id)===id);
+  const nombre = p ? p.name + (p.presentation ? ' (' + p.presentation + ')' : '') : '—';
+  const hasOrders = S.orders.some(o => o.items.some(i => Number(i.productId)===id));
+  const sub = nombre + (hasOrders ? '\n⚠️ Este producto está en pedidos activos. Se eliminará de ellos.' : '\nEsta acción no se puede deshacer.');
+  askConfirm('¿Eliminar este producto?', sub, () => {
+    S.orders.forEach(o => { o.items = o.items.filter(i => Number(i.productId)!==id); });
+    S.products = S.products.filter(p => Number(p.id)!==id);
+    Object.keys(S.cp).forEach(cid => { if (S.cp[cid]) delete S.cp[cid][id]; });
+    save(); toast('🗑 Producto eliminado'); renderProducts(); renderList();
+  });
+}
+
