@@ -144,6 +144,7 @@ function addClient() {
   // Un prospecto nace excluido de la generación automática de rutas; un cliente normal nace incluido
   if (isProspect) { newClient.isProspect = true; }
   S.clients.push(newClient);
+  if (newClient.address) syncPrincipalAddressFromField(id, newClient.address);
   const init = {}; S.products.forEach(p => { init[p.id] = p.basePrice; });
   S.cp[id] = init;
   save();
@@ -626,10 +627,12 @@ ${(()=>{
   const addrs = S.savedAddresses[c.id] || [];
   const addrRows = addrs.map((addr,i) => {
     const isDefault = (S.defaultAddresses && S.defaultAddresses[c.id] === i);
+    const isPrincipal = (S.principalAddresses && S.principalAddresses[c.id] === i);
     return `
-    <div style="display:flex;align-items:center;gap:6px;margin-bottom:5px;background:#161929;border-radius:7px;padding:6px 10px;border:1px solid ${isDefault?'#f59e0b':'transparent'}">
-      <span style="flex:1;font-size:12px;color:#f1f5f9">${isDefault?'⭐ ':''}${addr}</span>
-      <button onclick="setDefaultAddress(${c.id},${i})" style="background:none;border:none;color:${isDefault?'#f59e0b':'#475569'};cursor:pointer;font-size:13px;padding:0 4px" title="Predeterminada">${isDefault?'⭐':'☆'}</button>
+    <div style="display:flex;align-items:center;gap:6px;margin-bottom:5px;background:#161929;border-radius:7px;padding:6px 10px;border:1px solid ${isDefault?'#f59e0b':(isPrincipal?'#60a5fa':'transparent')}">
+      <span style="flex:1;font-size:12px;color:#f1f5f9">${isDefault?'⭐ ':''}${isPrincipal?'🏠 ':''}${addr}</span>
+      <button onclick="setDefaultAddress(${c.id},${i})" style="background:none;border:none;color:${isDefault?'#f59e0b':'#475569'};cursor:pointer;font-size:13px;padding:0 4px" title="Favorita (formulario de pedidos)">${isDefault?'⭐':'☆'}</button>
+      <button onclick="setPrincipalAddress(${c.id},${i})" style="background:none;border:none;color:${isPrincipal?'#60a5fa':'#475569'};cursor:pointer;font-size:13px;padding:0 4px" title="Principal (ficha del cliente)">🏠</button>
       <button onclick="editCliAddress(${c.id},${i})" style="background:none;border:none;color:#60a5fa;cursor:pointer;font-size:13px;padding:0 4px" title="Editar">✏️</button>
       <button onclick="removeCliAddress(${c.id},${i})" style="background:none;border:none;color:#ef4444;cursor:pointer;font-size:14px;padding:0 2px" title="Eliminar">✕</button>
     </div>`}).join('');
@@ -1329,6 +1332,40 @@ function setDefaultAddress(cid, idx) {
   save(); toast('📍 Dirección predeterminada guardada','#10b981'); renderClients();
 }
 
+// Marca una dirección de la lista como "Principal" (🏠) y refleja su texto
+// en el campo "Dirección" de la ficha del cliente. Independiente de la
+// favorita (⭐) usada en el formulario de pedidos: pueden coincidir o no.
+function setPrincipalAddress(cid, idx) {
+  if (!S.principalAddresses) S.principalAddresses = {};
+  S.principalAddresses[cid] = idx;
+  const arr = (S.savedAddresses && S.savedAddresses[cid]) || [];
+  const c = S.clients.find(x => x.id === cid);
+  if (c && arr[idx] !== undefined) c.address = arr[idx];
+  save(); toast('🏠 Dirección principal actualizada','#10b981'); renderClients();
+}
+
+// Sincroniza el campo "Dirección" de la ficha del cliente hacia su listado
+// de direcciones de entrega, marcándola como "Principal" (🏠):
+// - Si el texto ya existe tal cual en el listado, solo marca esa entrada.
+// - Si no existe, agrega una entrada nueva y mueve el marcador Principal a
+//   ella, dejando la entrada anterior suelta en la lista (conserva su
+//   marca de favorita ⭐ si la tenía, ya que su índice no cambia).
+function syncPrincipalAddressFromField(cid, txt) {
+  if (!txt) return;
+  if (!S.savedAddresses) S.savedAddresses = {};
+  if (!S.principalAddresses) S.principalAddresses = {};
+  let arr = S.savedAddresses[cid] || [];
+  if (!Array.isArray(arr)) arr = [];
+  const existingIdx = arr.indexOf(txt);
+  if (existingIdx !== -1) {
+    S.principalAddresses[cid] = existingIdx;
+  } else {
+    arr.push(txt);
+    S.principalAddresses[cid] = arr.length - 1;
+  }
+  S.savedAddresses[cid] = arr;
+}
+
 function addCliAddress(cid) {
   const inp = document.getElementById('new-cli-addr-'+cid);
   const txt = inp ? inp.value.trim() : '';
@@ -1348,6 +1385,11 @@ function removeCliAddress(cid, idx) {
   if (!Array.isArray(arr)) return;
   arr.splice(idx, 1);
   S.savedAddresses[cid] = arr;
+  // Reacomodar el índice de la dirección "Principal" tras el borrado
+  if (S.principalAddresses && S.principalAddresses[cid] !== undefined) {
+    if (S.principalAddresses[cid] === idx) delete S.principalAddresses[cid];
+    else if (S.principalAddresses[cid] > idx) S.principalAddresses[cid]--;
+  }
   save(); renderClients();
 }
 
@@ -1360,6 +1402,11 @@ function editCliAddress(cid, idx) {
   if (!txt) return toast('La dirección no puede estar vacía','#f59e0b');
   arr[idx] = txt;
   S.savedAddresses[cid] = arr;
+  // Si esta es la dirección marcada como Principal, reflejar el cambio en la ficha del cliente
+  if (S.principalAddresses && S.principalAddresses[cid] === idx) {
+    const c = S.clients.find(x => x.id === cid);
+    if (c) c.address = txt;
+  }
   save(); toast('📍 Dirección actualizada','#10b981'); renderClients();
 }
 
@@ -1639,6 +1686,7 @@ c.phone      = document.getElementById("ecp-"+id).value.trim();
 // Actualizar el nombre guardado en todos sus pedidos/cotizaciones existentes
 S.orders.forEach(o => { if (Number(o.clientId) === id) o.clientName = c.name; });
 c.address    = document.getElementById("eca-"+id).value.trim();
+syncPrincipalAddressFromField(id, c.address);
 const selDept = document.getElementById("ecc-"+id)?.value;
 const selMun  = document.getElementById("ecm-"+id)?.value;
 c.deptId     = selDept ? Number(selDept) : null;
