@@ -909,14 +909,3 @@ ${rows}
   setTimeout(() => URL.revokeObjectURL(url), 10000);
 }
 
-// ── Hook de navegación ────────────────────────────────
-const _goTab = goTab;
-goTab = function(name) {
-  _goTab(name);
-  if (name==='routes') renderRoutes();
-};
-
-// ── Hook: asignar ruta al registrar pedido ────────────
-// Se aplica después del submit original vía MutationObserver en toast
-const _origGoTabForRoute = goTab;
-
