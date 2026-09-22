@@ -629,22 +629,22 @@ ${(()=>{
     const isDefault = (S.defaultAddresses && S.defaultAddresses[c.id] === i);
     const isPrincipal = (S.principalAddresses && S.principalAddresses[c.id] === i);
     return `
-    <div style="display:flex;align-items:center;gap:6px;margin-bottom:5px;background:#161929;border-radius:7px;padding:6px 10px;border:1px solid ${isDefault?'#f59e0b':(isPrincipal?'#60a5fa':'transparent')}">
-      <span style="flex:1;font-size:12px;color:#f1f5f9">${isDefault?'⭐ ':''}${isPrincipal?'🏠 ':''}${addr}</span>
+    <div style="display:flex;align-items:center;gap:6px;margin-bottom:5px;background:#161929;border-radius:7px;padding:6px 10px;border:1px solid ${isDefault?'#f59e0b':'transparent'}">
+      <span onclick="setPrincipalAddress(${c.id},${i})" style="cursor:pointer;flex-shrink:0;font-size:10px;font-weight:700;padding:2px 7px;border-radius:9px;background:${isPrincipal?'#14532d':'#1e2333'};color:${isPrincipal?'#4ade80':'#64748b'};border:1px solid ${isPrincipal?'#22c55e':'#334155'}" title="Marcar como dirección Fiscal">Fiscal</span>
+      <span style="flex:1;font-size:12px;color:#f1f5f9">${isDefault?'⭐ ':''}${addr}</span>
       <button onclick="setDefaultAddress(${c.id},${i})" style="background:none;border:none;color:${isDefault?'#f59e0b':'#475569'};cursor:pointer;font-size:13px;padding:0 4px" title="Favorita (formulario de pedidos)">${isDefault?'⭐':'☆'}</button>
-      <button onclick="setPrincipalAddress(${c.id},${i})" style="background:none;border:none;color:${isPrincipal?'#60a5fa':'#475569'};cursor:pointer;font-size:13px;padding:0 4px" title="Principal (ficha del cliente)">🏠</button>
       <button onclick="editCliAddress(${c.id},${i})" style="background:none;border:none;color:#60a5fa;cursor:pointer;font-size:13px;padding:0 4px" title="Editar">✏️</button>
       <button onclick="removeCliAddress(${c.id},${i})" style="background:none;border:none;color:#ef4444;cursor:pointer;font-size:14px;padding:0 2px" title="Eliminar">✕</button>
     </div>`}).join('');
   return `<div style="margin-top:10px;border-top:1px solid #2a3050;padding-top:10px">
     <div onclick="toggleCliSec('csd-${c.id}')" style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;padding:2px 0;margin-bottom:4px">
-      <span style="font-size:11px;color:${addrs.length?'#4ade80':'#94a3b8'};font-weight:700">📍 DIRECCIONES DE ENTREGA${addrs.length?` (${addrs.length})`:''}</span>
+      <span style="font-size:11px;color:${addrs.length?'#4ade80':'#94a3b8'};font-weight:700">📍 Direcciones${addrs.length?` (${addrs.length})`:''}</span>
       <span style="color:#64748b;font-size:11px">▼</span>
     </div>
     <div id="csd-${c.id}" style="display:${(window._cliSecOpen&&window._cliSecOpen['csd-'+c.id])?'block':'none'}">
     ${addrRows || '<div style="font-size:11px;color:#64748b;margin-bottom:6px">Sin direcciones guardadas.</div>'}
     <div style="display:flex;gap:6px;margin-top:4px">
-      <input class="inp" id="new-cli-addr-${c.id}" placeholder="Nueva dirección de entrega..." style="margin-bottom:0;flex:1;font-size:12px"/>
+      <input class="inp" id="new-cli-addr-${c.id}" placeholder="Nueva dirección..." style="margin-bottom:0;flex:1;font-size:12px"/>
       <button class="bg" style="padding:8px 12px;white-space:nowrap;font-size:12px" onclick="addCliAddress(${c.id})">+ Agregar</button>
     </div>
   </div>
@@ -1332,7 +1332,7 @@ function setDefaultAddress(cid, idx) {
   save(); toast('📍 Dirección predeterminada guardada','#10b981'); renderClients();
 }
 
-// Marca una dirección de la lista como "Principal" (🏠) y refleja su texto
+// Marca una dirección de la lista como "Fiscal" y refleja su texto
 // en el campo "Dirección" de la ficha del cliente. Independiente de la
 // favorita (⭐) usada en el formulario de pedidos: pueden coincidir o no.
 function setPrincipalAddress(cid, idx) {
@@ -1341,13 +1341,25 @@ function setPrincipalAddress(cid, idx) {
   const arr = (S.savedAddresses && S.savedAddresses[cid]) || [];
   const c = S.clients.find(x => x.id === cid);
   if (c && arr[idx] !== undefined) c.address = arr[idx];
-  save(); toast('🏠 Dirección principal actualizada','#10b981'); renderClients();
+  save(); toast('🧾 Dirección fiscal actualizada','#10b981'); renderClients();
+}
+
+// Si el listado de direcciones del cliente queda con una sola entrada,
+// esta pasa a ser automáticamente la Fiscal y llena el campo "Dirección"
+// de la ficha del cliente.
+function enforceSoloUnaEsFiscal(cid) {
+  const arr = (S.savedAddresses && S.savedAddresses[cid]) || [];
+  if (arr.length !== 1) return;
+  if (!S.principalAddresses) S.principalAddresses = {};
+  S.principalAddresses[cid] = 0;
+  const c = S.clients.find(x => x.id === cid);
+  if (c) c.address = arr[0];
 }
 
 // Sincroniza el campo "Dirección" de la ficha del cliente hacia su listado
-// de direcciones de entrega, marcándola como "Principal" (🏠):
+// general de direcciones, marcándola como "Fiscal":
 // - Si el texto ya existe tal cual en el listado, solo marca esa entrada.
-// - Si no existe, agrega una entrada nueva y mueve el marcador Principal a
+// - Si no existe, agrega una entrada nueva y mueve el marcador Fiscal a
 //   ella, dejando la entrada anterior suelta en la lista (conserva su
 //   marca de favorita ⭐ si la tenía, ya que su índice no cambia).
 function syncPrincipalAddressFromField(cid, txt) {
@@ -1364,6 +1376,7 @@ function syncPrincipalAddressFromField(cid, txt) {
     S.principalAddresses[cid] = arr.length - 1;
   }
   S.savedAddresses[cid] = arr;
+  enforceSoloUnaEsFiscal(cid);
 }
 
 function addCliAddress(cid) {
@@ -1376,6 +1389,7 @@ function addCliAddress(cid) {
   if (arr.includes(txt)) return toast('Ya existe esa dirección','#f59e0b');
   arr.push(txt);
   S.savedAddresses[cid] = arr;
+  enforceSoloUnaEsFiscal(cid);
   save(); toast('📍 Dirección guardada','#10b981'); renderClients();
 }
 
@@ -1385,11 +1399,12 @@ function removeCliAddress(cid, idx) {
   if (!Array.isArray(arr)) return;
   arr.splice(idx, 1);
   S.savedAddresses[cid] = arr;
-  // Reacomodar el índice de la dirección "Principal" tras el borrado
+  // Reacomodar el índice de la dirección "Fiscal" tras el borrado
   if (S.principalAddresses && S.principalAddresses[cid] !== undefined) {
     if (S.principalAddresses[cid] === idx) delete S.principalAddresses[cid];
     else if (S.principalAddresses[cid] > idx) S.principalAddresses[cid]--;
   }
+  enforceSoloUnaEsFiscal(cid);
   save(); renderClients();
 }
 
@@ -1402,7 +1417,7 @@ function editCliAddress(cid, idx) {
   if (!txt) return toast('La dirección no puede estar vacía','#f59e0b');
   arr[idx] = txt;
   S.savedAddresses[cid] = arr;
-  // Si esta es la dirección marcada como Principal, reflejar el cambio en la ficha del cliente
+  // Si esta es la dirección marcada como Fiscal, reflejar el cambio en la ficha del cliente
   if (S.principalAddresses && S.principalAddresses[cid] === idx) {
     const c = S.clients.find(x => x.id === cid);
     if (c) c.address = txt;
