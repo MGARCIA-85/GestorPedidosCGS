@@ -120,7 +120,7 @@ function renderRoutes() {
         return `<div style="font-size:12px;padding:5px 0;border-bottom:1px solid #1e2640">
           <div style="display:flex;justify-content:space-between;align-items:baseline;gap:6px">
             <span style="color:#f1f5f9;font-weight:600;flex:1;min-width:0">${it.qty} ${p?p.name:'—'}${specText} × ${Q(pr)}/${ul}${ivaText}</span>
-            <span style="color:#10b981;font-weight:700;flex-shrink:0">${Q(sub)}</span>
+            <span style="color:#f1f5f9;font-weight:700;flex-shrink:0">${Q(sub)}</span>
           </div>
         </div>`;
       }).join('');
@@ -136,7 +136,7 @@ function renderRoutes() {
               onclick="event.stopPropagation();toggleRouteOrdSel(${r.id},${o.id},this.checked)"/>
             <div style="display:flex;flex-direction:column;min-width:0">
               <div><span style="font-size:13px;font-weight:700;color:#f1f5f9">#${rIdx+1} </span><span style="font-size:13px;font-weight:700;color:${clientNameColor(o)};cursor:pointer;text-decoration:underline" onclick="event.stopPropagation();openClientCard(${o.clientId})">${o.clientName}</span></div>
-              <div style="font-size:10px;color:#64748b;margin-top:2px">${fmtOrdDate(o.date)}${o.quote?' · Cot: '+o.quote:''}${o.oc?' · Orden: '+o.oc:''}</div>
+              <div style="font-size:10px;color:#64748b;margin-top:2px">${fmtOrdDate(o.date)}${o.quote?' · Cot: <strong style="color:#2dd4bf">'+o.quote+'</strong>':''}${o.oc?' · Orden: <strong style="color:#818cf8">'+o.oc+'</strong>':''}</div>
               ${isOrderBlocked(o)?`<div style="font-size:10px;color:#a855f7;font-weight:700">🔒 Bloqueado (fecha futura)</div>`:''}
             </div>
           </div>

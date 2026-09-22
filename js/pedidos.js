@@ -2425,7 +2425,7 @@ const spec = p?.presentation ? ` (${p.presentation})` : '';
 const nombre = `${p?p.name:'Eliminado'}${spec}`;
 return `<div style="display:flex;justify-content:space-between;align-items:baseline;gap:4px;font-size:12px;padding:3px 0;border-bottom:1px solid #1e2640">
   <span style="color:#f1f5f9;font-weight:600;flex:1;min-width:0">${it.qty} ${nombre} × ${Q(pr)}/${ul}${ivaLabel}</span>
-  <span style="color:#10b981;font-weight:700;flex-shrink:0">${lineDisplay}</span>
+  <span style="color:#f1f5f9;font-weight:700;flex-shrink:0">${lineDisplay}</span>
 </div>`;
 }).join('');
 const sCls = o.status==='Concluido'?'bp-fact':o.status==='Cotización'?'bp-quot':'bp-pend';
@@ -2447,10 +2447,10 @@ card.innerHTML = `
   onclick="event.stopPropagation();toggleOrdSel(${o.id},this.checked)"/>
 <div>
 <div style="font-weight:800;font-size:15px;color:${clientNameColor(o)};cursor:pointer;text-decoration:underline" onclick="event.stopPropagation();openClientCard(${o.clientId})">${o.clientName}</div>
-<div style="font-size:10px;color:#64748b">${o.date}${o.editedAt?' · Editado: '+o.editedAt:''}</div>
+<div style="font-size:10px;color:#64748b">${fmtOrdDate(o.date)}${o.editedAt?' · Editado: '+fmtOrdDate(o.editedAt):''}</div>
 ${_blocked?`<div style="font-size:11px;color:#a855f7;font-weight:700;margin-top:1px">🔒 Bloqueado (fecha futura)</div>`:''}
-${o.quote?`<div style="font-size:11px;color:#94a3b8;margin-top:1px">Cot: ${o.quote}</div>`:''}
-${o.oc?`<div style="font-size:11px;color:#94a3b8;margin-top:1px">OC: ${o.oc}</div>`:''}
+${o.quote?`<div style="font-size:11px;color:#94a3b8;margin-top:1px">Cot: <strong style="color:#2dd4bf">${o.quote}</strong></div>`:''}
+${o.oc?`<div style="font-size:11px;color:#94a3b8;margin-top:1px">OC: <strong style="color:#818cf8">${o.oc}</strong></div>`:''}
 ${o.delivery?`<div style="font-size:11px;color:#3b82f6;margin-top:1px">📍 Entrega: ${o.delivery}</div>`:''}
 ${o.quoteNote?`<div style="font-size:11px;color:#38bdf8;font-weight:700;margin-top:1px">📅 Fecha de entrega: ${fmtEntrega(o.quoteNote)}</div>`:''}
 </div>

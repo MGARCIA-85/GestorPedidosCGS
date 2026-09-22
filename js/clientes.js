@@ -819,7 +819,7 @@ ${(()=>{
       const iva = o.applyIva?` <span style="color:#facc15;font-size:10px">+IVA</span>`:'';
       return `<div style="display:flex;justify-content:space-between;align-items:baseline;gap:4px;font-size:11px;padding:3px 0;border-bottom:1px solid #1e2640">
         <span style="color:#f1f5f9;font-weight:600;flex:1;min-width:0">${it.qty} ${p.name}${spec} × ${Q(pr)}/${ul}${iva}</span>
-        <span style="color:#10b981;font-weight:700;flex-shrink:0">${Q(sub)}</span>
+        <span style="color:#f1f5f9;font-weight:700;flex-shrink:0">${Q(sub)}</span>
       </div>`;
     }).filter(Boolean).join('');
     const cotBtn = `<button onclick="openQuoteFromCli(${o.id})" style="flex:1;padding:5px 0;background:transparent;border:1px solid #3b82f6;border-radius:6px;color:#60a5fa;font-size:11px;cursor:pointer">📄 Cot.</button>`;
@@ -835,7 +835,7 @@ ${(()=>{
         <div style="display:flex;align-items:center;gap:6px">
           <input type="checkbox" class="cli-ord-chk" data-cid="${c.id}" data-oid="${o.id}" onchange="updateCliOrdSummary(${c.id})"
             style="width:15px;height:15px;accent-color:#10b981;cursor:pointer;flex-shrink:0"/>
-          <div style="font-size:11px;color:#94a3b8">${fmtOrdDate(o.date)}${o.quote?' · '+o.quote:''}${o.oc?' · OC: '+o.oc:''}</div>
+          <div style="font-size:11px;color:#94a3b8">${fmtOrdDate(o.date)}${o.quote?' · <strong style="color:#2dd4bf">'+o.quote+'</strong>':''}${o.oc?' · OC: <strong style="color:#818cf8">'+o.oc+'</strong>':''}</div>
         </div>
         <div style="display:flex;align-items:center;gap:5px">
           ${o.routeId?`<span style="font-size:10px;color:#f59e0b;font-weight:700">(RUTA)</span>`:''}
