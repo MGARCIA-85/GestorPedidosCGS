@@ -399,6 +399,9 @@ function toggleCliSec(id) {
 }
 
 function renderClients() {
+  // Corrige clientes que ya tenían una sola dirección guardada antes de
+  // existir esta regla (campo "Dirección" vacío o desincronizado)
+  migrateSoloUnaEsFiscal();
   // Recordar si hay ficha flotante activa
   const floatCid = window._floatCid || null;
   // Actualizar selector de prioridad (Nuevo Cliente) desde la lista maestra de Configuración
@@ -1328,8 +1331,14 @@ function deleteCliNote(cid, idx) {
 
 function setDefaultAddress(cid, idx) {
   if (!S.defaultAddresses) S.defaultAddresses = {};
-  S.defaultAddresses[cid] = idx;
-  save(); toast('📍 Dirección predeterminada guardada','#10b981'); renderClients();
+  if (S.defaultAddresses[cid] === idx) {
+    // Ya estaba marcada como favorita: al presionar de nuevo, se deselecciona
+    delete S.defaultAddresses[cid];
+    save(); toast('☆ Favorita quitada','#94a3b8'); renderClients();
+  } else {
+    S.defaultAddresses[cid] = idx;
+    save(); toast('📍 Dirección predeterminada guardada','#10b981'); renderClients();
+  }
 }
 
 // Marca una dirección de la lista como "Fiscal" y refleja su texto
@@ -1346,14 +1355,29 @@ function setPrincipalAddress(cid, idx) {
 
 // Si el listado de direcciones del cliente queda con una sola entrada,
 // esta pasa a ser automáticamente la Fiscal y llena el campo "Dirección"
-// de la ficha del cliente.
+// de la ficha del cliente. Devuelve true si hizo algún cambio (para que
+// quien la llame en lote sepa si necesita guardar).
 function enforceSoloUnaEsFiscal(cid) {
   const arr = (S.savedAddresses && S.savedAddresses[cid]) || [];
-  if (arr.length !== 1) return;
+  if (arr.length !== 1) return false;
   if (!S.principalAddresses) S.principalAddresses = {};
-  S.principalAddresses[cid] = 0;
   const c = S.clients.find(x => x.id === cid);
+  const yaEsFiscal = S.principalAddresses[cid] === 0;
+  const yaSincronizada = c && c.address === arr[0];
+  if (yaEsFiscal && yaSincronizada) return false;
+  S.principalAddresses[cid] = 0;
   if (c) c.address = arr[0];
+  return true;
+}
+
+// Revisión de todos los clientes: corrige retroactivamente a quienes ya
+// tenían una sola dirección guardada antes de que existiera esta regla
+// (su campo "Dirección" pudo haber quedado vacío o desactualizado).
+function migrateSoloUnaEsFiscal() {
+  if (!S.clients || !S.savedAddresses) return;
+  let changed = false;
+  S.clients.forEach(c => { if (enforceSoloUnaEsFiscal(c.id)) changed = true; });
+  if (changed) save();
 }
 
 // Sincroniza el campo "Dirección" de la ficha del cliente hacia su listado
