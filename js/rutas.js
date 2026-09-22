@@ -115,7 +115,7 @@ function renderRoutes() {
         const ul  = p?.unitLabel || 'unidad';
         const us  = Number(p?.unitSize) || 1;
         const sub = pr * it.qty * us;
-        const ivaText = o.applyIva ? ' <span style="color:#60a5fa;font-size:10px">+IVA</span>' : '';
+        const ivaText = o.applyIva ? ' <span style="color:#facc15;font-size:10px">+IVA</span>' : '';
         const specText = pres ? ` <span style="color:#64748b;font-weight:400;font-size:11px">(${pres})</span>` : '';
         return `<div style="font-size:12px;padding:5px 0;border-bottom:1px solid #1e2640">
           <div style="display:flex;justify-content:space-between;align-items:baseline;gap:6px">
@@ -148,15 +148,15 @@ function renderRoutes() {
         <!-- DETALLE: colapsable -->
         ${ordOpen ? `<div style="padding:0 10px 10px">
           <!-- Entrega y quoteNote ARRIBA de productos -->
-          ${o.delivery?`<div style="font-size:11px;color:#a78bfa;font-weight:600;margin-bottom:4px;margin-top:4px">📍 ${o.delivery}</div>`:''}
-          ${o.quoteNote?`<div style="font-size:11px;color:#f59e0b;font-weight:700;margin-bottom:6px">📅 Fecha de entrega: ${fmtEntrega(o.quoteNote)}</div>`:''}
+          ${o.delivery?`<div style="font-size:11px;color:#3b82f6;font-weight:600;margin-bottom:4px;margin-top:4px">📍 ${o.delivery}</div>`:''}
+          ${o.quoteNote?`<div style="font-size:11px;color:#38bdf8;font-weight:700;margin-bottom:6px">📅 Fecha de entrega: ${fmtEntrega(o.quoteNote)}</div>`:''}
           <!-- Productos -->
           <div style="background:#0d0f18;border-radius:6px;padding:6px 8px;margin-bottom:8px">
             ${itemsHtml || '<div style="font-size:11px;color:#64748b">Sin productos</div>'}
           </div>
           <!-- Total y bonif -->
           <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
-            <span style="font-size:13px;font-weight:700;color:#f59e0b">TOTAL ${Q(oDisp)}</span>
+            <span style="font-size:13px;font-weight:700;color:#f1f5f9">TOTAL ${Q(oDisp)}</span>
             ${(o.bonusLines&&o.bonusLines.length)?(()=>{
               const av = o.bonusLines.every(bl => bl.fromRuleId != null);
               const ae = o.bonusLines.every(bl => bl.exceptional);
@@ -166,7 +166,7 @@ function renderRoutes() {
             })():''}
           </div>
           <!-- Comentarios normales ABAJO -->
-          ${(o.comments&&o.comments.length)?o.comments.filter(Boolean).map(cm=>`<div style="font-size:11px;color:#60a5fa;font-style:italic;margin-bottom:3px">💬 ${cm}</div>`).join(''):''}
+          ${(o.comments&&o.comments.length)?o.comments.filter(Boolean).map(cm=>`<div style="font-size:11px;color:#f97316;font-style:italic;margin-bottom:3px">💬 ${cm}</div>`).join(''):''}
           <!-- Bonificación -->
           ${(()=>{
             if (!o.bonusLines||!o.bonusLines.length) return '';
@@ -174,7 +174,7 @@ function renderRoutes() {
               const p = S.products.find(x=>x.id===Number(bl.productId));
               const spec = p?.presentation?` (${p.presentation})`:'';
               const ul = p?.unitLabel||'unidad';
-              const ivaLbl = o.applyIva ? ` <span style="font-size:9px;color:#60a5fa">+IVA</span>` : '';
+              const ivaLbl = o.applyIva ? ` <span style="font-size:9px;color:#facc15">+IVA</span>` : '';
               return `<div style="font-size:11px;color:#f1f5f9;font-weight:600;padding:2px 0;border-bottom:1px solid #1e2640">${bl.qty} ${p?p.name:'—'}${spec} × ${Q(bl.price||0)}/${ul}${ivaLbl}</div>`;
             }).join('');
             return `<div style="margin-top:4px"><div style="font-size:11px;color:#10b981;font-weight:700;margin-bottom:3px">🎁 BONIFICACIÓN</div><div style="background:#0d0f18;border-radius:5px;padding:4px 6px">${bLines}</div></div>`;

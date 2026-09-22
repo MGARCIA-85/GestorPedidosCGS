@@ -816,7 +816,7 @@ ${(()=>{
       const us = Number(p.unitSize)||1;
       const sub = pr*it.qty*us;
       const spec = p.presentation?` (${p.presentation})`:'';
-      const iva = o.applyIva?` <span style="color:#60a5fa;font-size:10px">+IVA</span>`:'';
+      const iva = o.applyIva?` <span style="color:#facc15;font-size:10px">+IVA</span>`:'';
       return `<div style="display:flex;justify-content:space-between;align-items:baseline;gap:4px;font-size:11px;padding:3px 0;border-bottom:1px solid #1e2640">
         <span style="color:#f1f5f9;font-weight:600;flex:1;min-width:0">${it.qty} ${p.name}${spec} × ${Q(pr)}/${ul}${iva}</span>
         <span style="color:#10b981;font-weight:700;flex-shrink:0">${Q(sub)}</span>
@@ -842,18 +842,18 @@ ${(()=>{
           <span style="font-size:10px;color:${sCls};font-weight:700">${o.cancelled?'🚫 CANCELADO':o.status}</span>
         </div>
       </div>
-      ${o.delivery?`<div style="font-size:11px;color:#a78bfa;font-weight:600;margin-bottom:3px">📍 ${o.delivery}</div>`:''}
-      ${o.quoteNote?`<div style="font-size:11px;color:#f59e0b;font-weight:700;margin-bottom:4px">📅 Fecha de entrega: ${fmtEntrega(o.quoteNote)}</div>`:''}
+      ${o.delivery?`<div style="font-size:11px;color:#3b82f6;font-weight:600;margin-bottom:3px">📍 ${o.delivery}</div>`:''}
+      ${o.quoteNote?`<div style="font-size:11px;color:#38bdf8;font-weight:700;margin-bottom:4px">📅 Fecha de entrega: ${fmtEntrega(o.quoteNote)}</div>`:''}
       <div style="background:#0d0f18;border-radius:5px;padding:4px 6px;margin-bottom:4px">${itemsHtml}</div>
-      <div style="font-size:13px;font-weight:700;color:#f59e0b;margin-bottom:4px">TOTAL ${Q(disp)}</div>
-      ${(o.comments&&o.comments.length)?o.comments.filter(Boolean).map(cm=>`<div style="font-size:11px;color:#60a5fa;font-style:italic;margin-bottom:3px">💬 ${cm}</div>`).join(''):''}
+      <div style="font-size:13px;font-weight:700;color:#f1f5f9;margin-bottom:4px">TOTAL ${Q(disp)}</div>
+      ${(o.comments&&o.comments.length)?o.comments.filter(Boolean).map(cm=>`<div style="font-size:11px;color:#f97316;font-style:italic;margin-bottom:3px">💬 ${cm}</div>`).join(''):''}
       ${(()=>{
         if (!o.bonusLines||!o.bonusLines.length) return '';
         const bLines = o.bonusLines.map(bl=>{
           const p = S.products.find(x=>x.id===Number(bl.productId));
           const spec = p?.presentation?` (${p.presentation})`:'';
           const ul = p?.unitLabel||'unidad';
-          const ivaLbl = o.applyIva ? ` <span style="font-size:9px;color:#60a5fa">+IVA</span>` : '';
+          const ivaLbl = o.applyIva ? ` <span style="font-size:9px;color:#facc15">+IVA</span>` : '';
           return `<div style="font-size:11px;color:#f1f5f9;font-weight:600;padding:2px 0;border-bottom:1px solid #1e2640">${bl.qty} ${p?p.name:'—'}${spec} × ${Q(bl.price||0)}/${ul}${ivaLbl}</div>`;
         }).join('');
         const allVerified2 = o.bonusLines.every(bl => bl.fromRuleId != null);

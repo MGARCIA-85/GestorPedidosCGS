@@ -2420,7 +2420,7 @@ const us     = Number(p?.unitSize)||1;
 const ul     = p?.unitLabel||'unidad';
 const sub    = pr * it.qty * us;
 const lineDisplay = o.applyIva ? Q(sub*1.12) : Q(sub);
-const ivaLabel = o.applyIva ? ` <span style="font-size:9px;color:#60a5fa">+IVA</span>` : '';
+const ivaLabel = o.applyIva ? ` <span style="font-size:9px;color:#facc15">+IVA</span>` : '';
 const spec = p?.presentation ? ` (${p.presentation})` : '';
 const nombre = `${p?p.name:'Eliminado'}${spec}`;
 return `<div style="display:flex;justify-content:space-between;align-items:baseline;gap:4px;font-size:12px;padding:3px 0;border-bottom:1px solid #1e2640">
@@ -2451,8 +2451,8 @@ card.innerHTML = `
 ${_blocked?`<div style="font-size:11px;color:#a855f7;font-weight:700;margin-top:1px">🔒 Bloqueado (fecha futura)</div>`:''}
 ${o.quote?`<div style="font-size:11px;color:#94a3b8;margin-top:1px">Cot: ${o.quote}</div>`:''}
 ${o.oc?`<div style="font-size:11px;color:#94a3b8;margin-top:1px">OC: ${o.oc}</div>`:''}
-${o.delivery?`<div style="font-size:11px;color:#a78bfa;margin-top:1px">📍 Entrega: ${o.delivery}</div>`:''}
-${o.quoteNote?`<div style="font-size:11px;color:#f59e0b;font-weight:700;margin-top:1px">📅 Fecha de entrega: ${fmtEntrega(o.quoteNote)}</div>`:''}
+${o.delivery?`<div style="font-size:11px;color:#3b82f6;margin-top:1px">📍 Entrega: ${o.delivery}</div>`:''}
+${o.quoteNote?`<div style="font-size:11px;color:#38bdf8;font-weight:700;margin-top:1px">📅 Fecha de entrega: ${fmtEntrega(o.quoteNote)}</div>`:''}
 </div>
 </div>
 </div>
@@ -2462,7 +2462,7 @@ ${o.quoteNote?`<div style="font-size:11px;color:#f59e0b;font-weight:700;margin-t
 ${lines}
 ${(()=>{
 const cmts = o.comments && o.comments.length ? o.comments : (o.note ? [o.note] : []);
-return cmts.map(c=>`<div style="font-size:11px;color:#60a5fa;margin-top:4px">💬 ${c}</div>`).join('');
+return cmts.map(c=>`<div style="font-size:11px;color:#f97316;margin-top:4px">💬 ${c}</div>`).join('');
 })()}
 <div style="margin-top:8px">
 ${(()=>{
@@ -2470,8 +2470,8 @@ if(o.pricesIncIva) return '<div style=\"font-size:11px;color:#64748b;margin-bott
 if(o.applyIva)    return '<div style=\"font-size:11px;color:#64748b;margin-bottom:2px\">Subtotal: '+Q(tot)+' &nbsp;+&nbsp; IVA 12%: '+Q(tot*0.12)+'</div>';
 return '';
 })()}
-<div style="font-weight:800;font-size:15px;color:#f59e0b;display:flex;align-items:center;gap:6px;flex-wrap:wrap">TOTAL ${Q(o.pricesIncIva ? tot : o.applyIva ? tot*1.12 : tot)}
-${(o.pricesIncIva||o.applyIva) ? '<span style=\"font-size:10px;font-weight:600;color:#60a5fa;background:#1e3a5f;padding:1px 6px;border-radius:4px\">IVA incl.</span>' : ''}
+<div style="font-weight:800;font-size:15px;color:#f1f5f9;display:flex;align-items:center;gap:6px;flex-wrap:wrap">TOTAL ${Q(o.pricesIncIva ? tot : o.applyIva ? tot*1.12 : tot)}
+${(o.pricesIncIva||o.applyIva) ? '<span style=\"font-size:10px;font-weight:600;color:#facc15;background:#1e3a5f;padding:1px 6px;border-radius:4px\">IVA incl.</span>' : ''}
 <span class="${sCls}" style="margin-left:auto">${o.status}</span></div>
 </div>
 ${(()=>{
@@ -2480,7 +2480,7 @@ const bLines = o.bonusLines.map(bl=>{
   const p = S.products.find(x=>x.id===Number(bl.productId));
   const spec = p?.presentation?` (${p.presentation})`:'';
   const ul = p?.unitLabel||'unidad';
-  const ivaLbl = o.applyIva ? ` <span style="font-size:9px;color:#60a5fa">+IVA</span>` : '';
+  const ivaLbl = o.applyIva ? ` <span style="font-size:9px;color:#facc15">+IVA</span>` : '';
   return `<div style="display:flex;justify-content:space-between;font-size:11px;padding:2px 0;border-bottom:1px solid #1e2640"><span style="color:#f1f5f9;font-weight:600">${bl.qty} ${p?p.name:'—'}${spec} × ${Q(bl.price||0)}/${ul}${ivaLbl}</span></div>`;
 }).join('');
 const allVerified = o.bonusLines.every(bl => bl.fromRuleId != null);
