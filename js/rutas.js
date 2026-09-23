@@ -24,7 +24,7 @@ function promptRenameRoute(rid) {
   if (!inp) return;
   const isOpen = wrap.style.display !== 'none';
   wrap.style.display = isOpen ? 'none' : 'flex';
-  if (!isOpen) { inp.value = r.name; inp.focus(); inp.select(); }
+  if (!isOpen) { inp.value = r.name; inp.focus(); inp.select(); renderRouteMunOrderEditor(rid); }
 }
 
 function saveRouteName(rid) {
@@ -36,6 +36,48 @@ function saveRouteName(rid) {
   r.name = val;
   wrap.style.display = 'none';
   save(); renderRoutes(); toast('✔ Nombre actualizado');
+}
+
+// Editor del orden manual de Sectores para una ruta ya creada. Lista plana
+// (sin agrupar por Departamento) con los Sectores presentes en los pedidos
+// actuales de esa ruta.
+function renderRouteMunOrderEditor(rid) {
+  const wrap = document.getElementById('route-mun-order-'+rid);
+  if (!wrap) return;
+  const r = S.routes.find(x => x.id === rid);
+  if (!r) return;
+  const orders = (r.orders||[]).map(id => S.orders.find(o=>o.id===id)).filter(Boolean);
+  const munIds = new Set();
+  orders.forEach(o => {
+    const cli = S.clients.find(c=>c.id===o.clientId);
+    if (cli && cli.municipioId) munIds.add(Number(cli.municipioId));
+  });
+  if (!munIds.size) {
+    wrap.innerHTML = '<div style="font-size:11px;color:#64748b">Esta ruta aún no tiene pedidos con Sector asignado.</div>';
+    return;
+  }
+  if (!S.routeMunOrder) S.routeMunOrder = {};
+  const relevantIds = [...munIds];
+  let ordered = (S.routeMunOrder[rid] || []).filter(id => relevantIds.includes(id));
+  relevantIds.forEach(id => { if (!ordered.includes(id)) ordered.push(id); });
+
+  const rows = ordered.map(mid => {
+    const m = (S.municipios||[]).find(x=>x.id===mid);
+    if (!m) return '';
+    return `<div class="sortable-item route-mun-order-item" data-id="${mid}" style="display:flex;align-items:center;gap:6px;background:#0d0d1f;border:1px solid #1a1a3a;border-radius:6px;padding:5px 9px;margin-bottom:4px">
+      <span class="drag-handle" style="font-size:14px">≡</span>
+      <span style="flex:1;font-size:12px;color:#f1f5f9">🏘️ ${m.name}</span>
+    </div>`;
+  }).join('');
+
+  wrap.innerHTML = `<div style="font-size:10px;color:#64748b;margin-bottom:6px">Mantén presionado ≡ para arrastrar y definir el orden de visita de los Sectores (sin importar su Departamento)</div>${rows}`;
+  setupDrag(wrap, (c)=>saveRouteMunOrderFromDOM(c, rid), 'route-mun-order-item');
+}
+
+function saveRouteMunOrderFromDOM(container, rid) {
+  if (!S.routeMunOrder) S.routeMunOrder = {};
+  S.routeMunOrder[rid] = [...container.querySelectorAll('.route-mun-order-item')].map(el => Number(el.dataset.id));
+  save();
 }
 
 // ── Eliminar ruta ─────────────────────────────────────
@@ -75,23 +117,18 @@ function renderRoutes() {
     const rSort2 = typeof rSortRaw==='object' ? (rSortRaw.s2||'none')    : 'none';
     const rSort3 = typeof rSortRaw==='object' ? (rSortRaw.s3||'none')    : 'none';
     const rSort  = rSort1;
-    // Orden manual de Departamentos/Sectores definido para esta ruta (si existe)
-    const deptOrder = (S.routeDeptOrder && S.routeDeptOrder[r.id]) || null;
+    // Orden manual de Sectores definido para esta ruta (si existe, lista
+    // plana sin agrupar por Departamento). Departamento se ordena siempre
+    // alfabéticamente; el orden manual solo aplica a Sector.
     const munOrder  = (S.routeMunOrder  && S.routeMunOrder[r.id]) || null;
     const _getSortVal = (o,key) => {
       const cli = S.clients.find(c=>c.id===o.clientId)||{};
       if (key==='alpha')  return (o.clientName||'').toLowerCase();
-      if (key==='dept') {
-        const d = (S.depts||[]).find(x=>x.id===cli.deptId);
-        let rank = 999999;
-        if (deptOrder) { const ix = deptOrder.indexOf(Number(cli.deptId)); if (ix!==-1) rank = ix; }
-        return String(rank).padStart(6,'0') + '_' + (d?d.name.toLowerCase():'');
-      }
+      if (key==='dept')   return ((S.depts||[]).find(x=>x.id===cli.deptId)||{name:''}).name.toLowerCase();
       if (key==='mun') {
         const m = (S.municipios||[]).find(x=>x.id===cli.municipioId);
         let rank = 999999;
-        const ord = munOrder && munOrder[cli.deptId];
-        if (ord) { const ix = ord.indexOf(Number(cli.municipioId)); if (ix!==-1) rank = ix; }
+        if (munOrder) { const ix = munOrder.indexOf(Number(cli.municipioId)); if (ix!==-1) rank = ix; }
         return String(rank).padStart(6,'0') + '_' + (m?m.name.toLowerCase():'');
       }
       if (key==='ruta')   return ((S.rutasCliente||[]).find(x=>x.id===cli.rutaClienteId)||{name:''}).name.toLowerCase();
@@ -237,10 +274,16 @@ function renderRoutes() {
       </div>
       <!-- Contenido colapsable -->
       <div id="route-body-${r.id}" style="display:${isOpen?'block':'none'}">
-        <!-- Editar nombre inline -->
-        <div id="route-edit-${r.id}" style="display:none;gap:6px;align-items:center;margin:10px 0 4px">
-          <input class="inp route-name-inp" style="margin:0;flex:1" placeholder="Nuevo nombre..."/>
-          <button class="bg" style="padding:9px 12px;white-space:nowrap" onclick="saveRouteName(${r.id})">✔ Guardar</button>
+        <!-- Editar nombre y orden de Sectores inline -->
+        <div id="route-edit-${r.id}" style="display:none;flex-direction:column;gap:8px;margin:10px 0 4px">
+          <div style="display:flex;gap:6px;align-items:center">
+            <input class="inp route-name-inp" style="margin:0;flex:1" placeholder="Nuevo nombre..."/>
+            <button class="bg" style="padding:9px 12px;white-space:nowrap" onclick="saveRouteName(${r.id})">✔ Guardar</button>
+          </div>
+          <div>
+            <div style="font-size:11px;color:#94a3b8;font-weight:700;margin-bottom:4px">↕️ Orden de Sectores de esta ruta</div>
+            <div id="route-mun-order-${r.id}"></div>
+          </div>
         </div>
         <!-- Pedidos -->
         <div style="margin-bottom:8px">
@@ -755,20 +798,13 @@ function generateRouteReport(rid, selIds, returnHTML=false) {
   const rSort3 = typeof rSortRaw==='object' ? (rSortRaw.s3||'none')    : 'none';
   const _gsv = (o,key) => {
     const cli = S.clients.find(c=>c.id===o.clientId)||{};
-    const deptOrder = (S.routeDeptOrder && S.routeDeptOrder[rid]) || null;
     const munOrder  = (S.routeMunOrder  && S.routeMunOrder[rid]) || null;
     if (key==='alpha')  return (o.clientName||'').toLowerCase();
-    if (key==='dept') {
-      const d = (S.depts||[]).find(x=>x.id===cli.deptId);
-      let rank = 999999;
-      if (deptOrder) { const ix = deptOrder.indexOf(Number(cli.deptId)); if (ix!==-1) rank = ix; }
-      return String(rank).padStart(6,'0') + '_' + (d?d.name.toLowerCase():'');
-    }
+    if (key==='dept')   return ((S.depts||[]).find(x=>x.id===cli.deptId)||{name:''}).name.toLowerCase();
     if (key==='mun') {
       const m = (S.municipios||[]).find(x=>x.id===cli.municipioId);
       let rank = 999999;
-      const ord = munOrder && munOrder[cli.deptId];
-      if (ord) { const ix = ord.indexOf(Number(cli.municipioId)); if (ix!==-1) rank = ix; }
+      if (munOrder) { const ix = munOrder.indexOf(Number(cli.municipioId)); if (ix!==-1) rank = ix; }
       return String(rank).padStart(6,'0') + '_' + (m?m.name.toLowerCase():'');
     }
     if (key==='ruta')   return ((S.rutasCliente||[]).find(x=>x.id===cli.rutaClienteId)||{name:''}).name.toLowerCase();
@@ -943,9 +979,10 @@ ${rows}
 function renderGenRutaChips() {
   const wrap = document.getElementById('gen-ruta-checks');
   if (!wrap) return;
+  const checked = new Set([...document.querySelectorAll('.gen-ruta-cb:checked')].map(cb=>cb.value));
   wrap.innerHTML = (S.rutasCliente || []).map(r => `
     <label style="display:flex;align-items:center;gap:5px;background:#0d2010;border:1px solid #1a3a1a;border-radius:8px;padding:5px 10px;cursor:pointer;font-size:13px;color:#f1f5f9">
-      <input type="checkbox" class="gen-ruta-cb" value="${r.id}" style="accent-color:#10b981" onchange="onGenRutaChange()"/> ${r.name}
+      <input type="checkbox" class="gen-ruta-cb" value="${r.id}" ${checked.has(String(r.id))?'checked':''} style="accent-color:#10b981" onchange="onGenRutaChange()"/> ${r.name}
     </label>`).join('');
 }
 
@@ -965,6 +1002,20 @@ function onGenDeptChange() {
   document.querySelectorAll('.gen-mun-cb:checked').forEach(cb => cb.checked = false);
   renderGenChips('mun');
   renderGenOrderList();
+}
+
+function selectAllGenChips(type) {
+  document.querySelectorAll('.gen-'+type+'-cb').forEach(cb => cb.checked = true);
+  if (type==='ruta') onGenRutaChange();
+  else if (type==='dept') onGenDeptChange();
+  else { renderGenChips('mun'); renderGenOrderList(); }
+}
+
+function clearGenChips(type) {
+  document.querySelectorAll('.gen-'+type+'-cb').forEach(cb => cb.checked = false);
+  if (type==='ruta') onGenRutaChange();
+  else if (type==='dept') onGenDeptChange();
+  else { renderGenChips('mun'); renderGenOrderList(); }
 }
 
 function renderGenChips(type) {
@@ -1008,12 +1059,12 @@ function renderGenChips(type) {
 
 function filterGenChips(type) { renderGenChips(type); }
 
-// ── Orden de visita (Departamentos y Sectores), definido al generar ──
-// Vive en el panel "Generar Pedidos": se arrastra para definir el orden
-// y se guarda asociado a la ruta que se está creando en ese momento.
+// ── Orden de visita de Sectores, definido al generar ──
+// Vive en el panel "Generar Pedidos": lista plana (sin agrupar por
+// Departamento) que se arrastra para definir el orden y se guarda
+// asociada a la ruta que se está creando en ese momento.
 function resetGenOrderState() {
-  window._genDeptOrder = [];
-  window._genMunOrder = {};
+  window._genMunOrder = [];
 }
 
 function renderGenOrderList() {
@@ -1023,62 +1074,38 @@ function renderGenOrderList() {
   const selMuns  = [...document.querySelectorAll('.gen-mun-cb:checked')].map(cb => Number(cb.value));
 
   if (!selDepts.length) {
-    wrap.innerHTML = '<div style="font-size:11px;color:#64748b">Marca uno o más Departamentos arriba para poder definir su orden de visita.</div>';
+    wrap.innerHTML = '<div style="font-size:11px;color:#64748b">Marca uno o más Departamentos arriba para poder definir el orden de sus Sectores.</div>';
     return;
   }
 
-  if (!window._genDeptOrder) window._genDeptOrder = [];
-  if (!window._genMunOrder)  window._genMunOrder  = {};
-  // Conservar el orden ya arrastrado; quitar lo desmarcado, agregar lo nuevo al final
-  window._genDeptOrder = window._genDeptOrder.filter(id => selDepts.includes(id));
-  selDepts.forEach(id => { if (!window._genDeptOrder.includes(id)) window._genDeptOrder.push(id); });
+  // Sectores relevantes: los marcados en el filtro Sector (si hay alguno);
+  // si no se marcó ninguno, todos los de los Departamentos marcados.
+  const munsOfDepts = (S.municipios||[]).filter(m => (m.deptIds||[]).some(did => selDepts.includes(did)));
+  const checkedMuns = munsOfDepts.filter(m => selMuns.includes(m.id));
+  const relevantMuns = checkedMuns.length ? checkedMuns : munsOfDepts;
+  const relevantIds = relevantMuns.map(m=>m.id);
 
-  const deptBlocks = window._genDeptOrder.map(did => {
-    const d = (S.depts||[]).find(x=>x.id===did);
-    if (!d) return '';
-    const munsOfDept = (S.municipios||[]).filter(m => (m.deptIds||[]).includes(did));
-    const checkedMunsOfDept = munsOfDept.filter(m => selMuns.includes(m.id));
-    const relevantMuns = checkedMunsOfDept.length ? checkedMunsOfDept : munsOfDept;
-    const relevantIds = relevantMuns.map(m=>m.id);
+  if (!window._genMunOrder) window._genMunOrder = [];
+  // Conservar el orden ya arrastrado; quitar lo que ya no aplica, agregar lo nuevo al final
+  window._genMunOrder = window._genMunOrder.filter(id => relevantIds.includes(id));
+  relevantIds.forEach(id => { if (!window._genMunOrder.includes(id)) window._genMunOrder.push(id); });
 
-    if (!window._genMunOrder[did]) window._genMunOrder[did] = [];
-    window._genMunOrder[did] = window._genMunOrder[did].filter(id => relevantIds.includes(id));
-    relevantIds.forEach(id => { if (!window._genMunOrder[did].includes(id)) window._genMunOrder[did].push(id); });
-
-    const munRows = window._genMunOrder[did].map(mid => {
-      const m = (S.municipios||[]).find(x=>x.id===mid);
-      if (!m) return '';
-      return `<div class="sortable-item gen-mun-order-item" data-id="${mid}" style="display:flex;align-items:center;gap:6px;background:#0d0d1f;border:1px solid #1a1a3a;border-radius:6px;padding:4px 8px;margin-bottom:4px">
-        <span class="drag-handle" style="font-size:13px">≡</span>
-        <span style="flex:1;font-size:11px;color:#f1f5f9">🏘️ ${m.name}</span>
-      </div>`;
-    }).join('');
-
-    return `<div class="sortable-item gen-dept-order-item" data-id="${did}" style="background:#0d1f0d;border:1px solid #1a3a1a;border-radius:8px;padding:8px;margin-bottom:8px">
-      <div style="display:flex;align-items:center;gap:6px;margin-bottom:${munRows?'6px':'0'}">
-        <span class="drag-handle" style="font-size:15px">≡</span>
-        <span style="flex:1;font-size:12px;font-weight:700;color:#f1f5f9">🏛️ ${d.name}</span>
-      </div>
-      ${munRows?`<div class="gen-mun-order-list" data-dept="${did}" style="margin-left:20px">${munRows}</div>`:''}
+  const munRows = window._genMunOrder.map(mid => {
+    const m = (S.municipios||[]).find(x=>x.id===mid);
+    if (!m) return '';
+    return `<div class="sortable-item gen-mun-order-item" data-id="${mid}" style="display:flex;align-items:center;gap:6px;background:#0d0d1f;border:1px solid #1a1a3a;border-radius:6px;padding:5px 9px;margin-bottom:4px">
+      <span class="drag-handle" style="font-size:14px">≡</span>
+      <span style="flex:1;font-size:12px;color:#f1f5f9">🏘️ ${m.name}</span>
     </div>`;
   }).join('');
 
-  wrap.innerHTML = `<div style="font-size:10px;color:#64748b;margin-bottom:6px">Mantén presionado ≡ para arrastrar y definir el orden de visita (Departamentos y, dentro de cada uno, sus Sectores)</div>${deptBlocks}`;
+  wrap.innerHTML = `<div style="font-size:10px;color:#64748b;margin-bottom:6px">Mantén presionado ≡ para arrastrar y definir el orden de visita de los Sectores (sin importar su Departamento)</div>${munRows||'<div style="font-size:11px;color:#64748b">Sin sectores para ordenar.</div>'}`;
 
-  setupDrag(wrap, saveGenDeptOrderFromDOM, 'gen-dept-order-item');
-  wrap.querySelectorAll('.gen-mun-order-list').forEach(el => {
-    const did = Number(el.dataset.dept);
-    setupDrag(el, (c) => saveGenMunOrderFromDOM(c, did), 'gen-mun-order-item');
-  });
+  setupDrag(wrap, saveGenMunOrderFromDOM, 'gen-mun-order-item');
 }
 
-function saveGenDeptOrderFromDOM(container) {
-  window._genDeptOrder = [...container.querySelectorAll('.gen-dept-order-item')].map(el => Number(el.dataset.id));
-}
-
-function saveGenMunOrderFromDOM(container, did) {
-  if (!window._genMunOrder) window._genMunOrder = {};
-  window._genMunOrder[did] = [...container.querySelectorAll('.gen-mun-order-item')].map(el => Number(el.dataset.id));
+function saveGenMunOrderFromDOM(container) {
+  window._genMunOrder = [...container.querySelectorAll('.gen-mun-order-item')].map(el => Number(el.dataset.id));
 }
 
 function toggleGenSection(bodyId, arrowId) {
@@ -1103,17 +1130,12 @@ function generateRouteOrdersFromPanel() {
   const newRoute = { id: S.nextRid++, name: routeName, orders: [] };
   S.routes.push(newRoute);
 
-  // Guardar el orden manual de Departamentos/Sectores definido en el panel,
-  // asociado a esta ruta (se usará al ordenar sus pedidos por Departamento/Sector)
-  if (!S.routeDeptOrder) S.routeDeptOrder = {};
-  if (!S.routeMunOrder)  S.routeMunOrder  = {};
-  if (window._genDeptOrder && window._genDeptOrder.length) {
-    S.routeDeptOrder[newRoute.id] = [...window._genDeptOrder];
-  }
-  if (window._genMunOrder && Object.keys(window._genMunOrder).length) {
-    const munOrderForRoute = {};
-    Object.keys(window._genMunOrder).forEach(did => { munOrderForRoute[did] = [...window._genMunOrder[did]]; });
-    S.routeMunOrder[newRoute.id] = munOrderForRoute;
+  // Guardar el orden manual de Sectores definido en el panel, asociado a
+  // esta ruta (se usará al ordenar sus pedidos por Sector). Es una lista
+  // plana, no agrupada por Departamento.
+  if (!S.routeMunOrder) S.routeMunOrder = {};
+  if (window._genMunOrder && window._genMunOrder.length) {
+    S.routeMunOrder[newRoute.id] = [...window._genMunOrder];
   }
 
   generateRouteOrders(newRoute.id, routeName, selDepts, selMuns, selRutas);
