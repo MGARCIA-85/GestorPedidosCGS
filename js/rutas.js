@@ -1067,6 +1067,18 @@ function resetGenOrderState() {
   window._genMunOrder = [];
 }
 
+// Al abrir el panel "Generar Pedidos" desde cero: Ruta queda vacía (sin
+// selección), pero Departamento y Sector inician con todo marcado por
+// defecto. Debe llamarse después de renderRoutes(), para que los chips
+// ya existan en el DOM.
+function applyGenDefaultSelection() {
+  document.querySelectorAll('.gen-dept-cb').forEach(cb => cb.checked = true);
+  renderGenChips('dept');
+  document.querySelectorAll('.gen-mun-cb').forEach(cb => cb.checked = true);
+  renderGenChips('mun');
+  renderGenOrderList();
+}
+
 function renderGenOrderList() {
   const wrap = document.getElementById('gen-order-list');
   if (!wrap) return;
