@@ -279,7 +279,7 @@ function fmtDDMMYYYY(d) {
 <button onclick="location.reload()" style="background:none;border:1px solid #2a3050;border-radius:8px;padding:6px 10px;color:#94a3b8;font-size:18px;cursor:pointer;flex-shrink:0" title="Actualizar">🔄</button>
 <button onclick="toggleGlobalSearch(event)" style="background:none;border:1px solid #2a3050;border-radius:8px;padding:6px 10px;color:#94a3b8;font-size:18px;cursor:pointer;flex-shrink:0" title="Buscar">🔍</button>
 <button onclick="goTab('config')" style="background:none;border:1px solid #2a3050;border-radius:8px;padding:6px 10px;color:#94a3b8;font-size:18px;cursor:pointer;flex-shrink:0" title="Configuración">⚙️</button>
-<span id="app-version-badge" style="font-size:9px;color:#475569;flex-shrink:0;align-self:center;margin-left:-4px" title="Versión de la app">v640</span>
+<span id="app-version-badge" style="font-size:9px;color:#475569;flex-shrink:0;align-self:center;margin-left:-4px" title="Versión de la app">v641</span>
 <span id="offline-badge" style="font-size:12px;flex-shrink:0;align-self:center;white-space:nowrap;color:#10b981" title="Con señal">🟢</span>
 </div>
 
@@ -758,7 +758,7 @@ Selecciona un cliente para continuar.<br><br>
     ➕ Nueva Ruta
   </button>
   <button class="bg" style="flex:1;padding:9px 6px;font-size:12px;font-weight:700"
-    onclick="(function(){var g=document.getElementById('gen-route-body'),b=document.getElementById('route-form-body'),e=document.getElementById('email-route-body');var open=g.style.display!=='none';g.style.display=open?'none':'block';if(!open){b.style.display='none';e.style.display='none';renderRoutes();}})()">
+    onclick="(function(){var g=document.getElementById('gen-route-body'),b=document.getElementById('route-form-body'),e=document.getElementById('email-route-body');var open=g.style.display!=='none';g.style.display=open?'none':'block';if(!open){b.style.display='none';e.style.display='none';resetGenOrderState();renderRoutes();}})()">
     🚀 Generar Pedidos
   </button>
   <button class="bs" style="flex:1;padding:9px 6px;font-size:12px;font-weight:700;color:#10b981;border-color:#064e3b"
@@ -820,6 +820,15 @@ Selecciona un cliente para continuar.<br><br>
     <input id="gen-mun-search" placeholder="Buscar sector..." oninput="filterGenChips('mun')"
       style="display:block;width:100%;box-sizing:border-box;background:#0d0f18;color:#f1f5f9;border:1px solid #2a3050;border-radius:8px;padding:8px 10px;font-size:13px;outline:none;margin-bottom:6px"/>
     <div id="gen-mun-checks" style="display:flex;flex-wrap:wrap;gap:6px"></div>
+  </div>
+
+  <!-- Orden de visita (Departamentos y Sectores) de esta ruta -->
+  <div onclick="toggleGenSection('gen-order-wrap','gen-order-arrow')" style="cursor:pointer;display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #1a3a1a;margin-bottom:6px">
+    <span class="lbl" style="margin:0">↕️ Orden de visita <span style="color:#64748b;font-size:10px">(opcional)</span></span>
+    <span id="gen-order-arrow" style="color:#64748b">▼</span>
+  </div>
+  <div id="gen-order-wrap" style="display:none;margin-bottom:12px">
+    <div id="gen-order-list"></div>
   </div>
 
   <button class="bg" style="width:100%;padding:12px;font-size:14px;font-weight:800" onclick="generateRouteOrdersFromPanel()">🚀 Generar Pedidos</button>
