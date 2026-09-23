@@ -59,6 +59,11 @@ function renderRouteMunOrderEditor(rid) {
   if (!S.routeMunOrder) S.routeMunOrder = {};
   const relevantIds = [...munIds];
   let ordered = (S.routeMunOrder[rid] || []).filter(id => relevantIds.includes(id));
+  // Los sectores de esta ruta que aún no tengan orden propio, se agregan
+  // siguiendo la plantilla general guardada (si la tienen)
+  const template = S.genMunOrderTemplate || [];
+  const fromTemplate = template.filter(id => relevantIds.includes(id) && !ordered.includes(id));
+  ordered = [...ordered, ...fromTemplate];
   relevantIds.forEach(id => { if (!ordered.includes(id)) ordered.push(id); });
 
   const rows = ordered.map(mid => {
@@ -76,7 +81,12 @@ function renderRouteMunOrderEditor(rid) {
 
 function saveRouteMunOrderFromDOM(container, rid) {
   if (!S.routeMunOrder) S.routeMunOrder = {};
-  S.routeMunOrder[rid] = [...container.querySelectorAll('.route-mun-order-item')].map(el => Number(el.dataset.id));
+  const ids = [...container.querySelectorAll('.route-mun-order-item')].map(el => Number(el.dataset.id));
+  S.routeMunOrder[rid] = ids;
+  // También actualizar la plantilla general reutilizable
+  if (!S.genMunOrderTemplate) S.genMunOrderTemplate = [];
+  const rest = S.genMunOrderTemplate.filter(id => !ids.includes(id));
+  S.genMunOrderTemplate = [...rest, ...ids];
   save();
 }
 
@@ -145,13 +155,26 @@ function renderRoutes() {
       if (rSort1==='default'||rSort1==='manual') return 0;
       return _cmpR(a,b,rSort1) || _cmpR(a,b,rSort2) || _cmpR(a,b,rSort3);
     });
+    // Filtro por Sector (independiente del orden elegido arriba)
+    if (!window._routeMunFilter) window._routeMunFilter = {};
+    const munFilterVal = window._routeMunFilter[r.id] || '';
+    const munOptions = [...new Set(orders.map(o => {
+      const cli = S.clients.find(c=>c.id===o.clientId);
+      return cli && cli.municipioId ? Number(cli.municipioId) : null;
+    }).filter(Boolean))]
+      .map(id => (S.municipios||[]).find(m=>m.id===id))
+      .filter(Boolean)
+      .sort((a,b)=>a.name.localeCompare(b.name,'es'));
+    const filteredOrders = munFilterVal
+      ? orderedOrders.filter(o => { const cli = S.clients.find(c=>c.id===o.clientId); return cli && Number(cli.municipioId)===Number(munFilterVal); })
+      : orderedOrders;
     const pend   = orders.filter(o=>o.status==='Confirmado').length;
     const fact   = orders.filter(o=>o.status==='Concluido').length;
     const tot    = orders.reduce((s,o)=>{const b=orderTotal(o.items,o.clientId);return s+(o.applyIva?b*1.12:b);},0);
     const isOpen   = !!window._routeOpen[r.id];
     const isPinned = (S.pinnedRoutes||[]).includes(r.id);
 
-    const ordRows = orderedOrders.length ? orderedOrders.map((o, rIdx) => {
+    const ordRows = filteredOrders.length ? filteredOrders.map((o, rIdx) => {
       const oTot = orderTotal(o.items,o.clientId);
       const oDisp = o.applyIva ? oTot*1.12 : oTot;
       const statusColor = isOrderBlocked(o)?'#a855f7':o.status==='Concluido'?'#4ade80':o.status==='Confirmado'?'#60a5fa':'#f1f5f9';
@@ -318,6 +341,12 @@ function renderRoutes() {
             </select>
           </div>
         </div>
+        ${munOptions.length?`<div style="margin-bottom:8px">
+          <select onchange="setRouteMunFilter(${r.id},this.value)" style="width:100%;font-size:11px;background:#161929;color:#f1f5f9;border:1px solid #2a3050;border-radius:6px;padding:5px 6px">
+            <option value="">🏘️ Todos los Sectores</option>
+            ${munOptions.map(m=>`<option value="${m.id}" ${String(munFilterVal)===String(m.id)?'selected':''}>${m.name}</option>`).join('')}
+          </select>
+        </div>`:''}
         ${rSort1==='manual'?`<div style="font-size:10px;color:#64748b;margin-bottom:6px;text-align:center">Mantén presionado ≡ para arrastrar y reordenar</div>`:''}
         <div style="margin-top:0" id="route-orders-${r.id}">${ordRows}</div>
       </div>
@@ -367,6 +396,14 @@ function setRouteOrdSort(rid, level, mode) {
   if (obj.s1==='manual') setTimeout(()=>initRouteOrderDrag(rid),100);
 }
 
+// Filtro por Sector dentro de las tarjetas de pedidos de una ruta (solo
+// afecta lo que se muestra; no cambia el orden ni los totales de la ruta)
+function setRouteMunFilter(rid, val) {
+  if (!window._routeMunFilter) window._routeMunFilter = {};
+  window._routeMunFilter[rid] = val;
+  renderRoutes();
+}
+
 function initRouteOrderDrag(rid) {
   const container = document.getElementById('route-orders-'+rid);
   if (!container) return;
@@ -403,8 +440,22 @@ function initRouteOrderDrag(rid) {
     dragging.style.opacity = '1';
     // Guardar nuevo orden en r.orders
     const r = S.routes.find(x=>x.id===rid); if (!r) { dragging=null; return; }
-    const newOrder = [...container.querySelectorAll('[data-oid]')].map(el=>Number(el.dataset.oid));
-    r.orders = newOrder;
+    const visibleIds = [...container.querySelectorAll('[data-oid]')].map(el=>Number(el.dataset.oid));
+    const hasHidden = (r.orders||[]).some(id => !visibleIds.includes(id));
+    if (hasHidden) {
+      // Si hay un filtro de Sector activo, algunos pedidos de la ruta no
+      // están visibles/arrastrables ahora mismo: se conservan en su
+      // posición original, y solo se reordenan entre sí los visibles.
+      const merged = [];
+      let vi = 0;
+      (r.orders||[]).forEach(id => {
+        if (visibleIds.includes(id)) { merged.push(visibleIds[vi]); vi++; }
+        else merged.push(id);
+      });
+      r.orders = merged;
+    } else {
+      r.orders = visibleIds;
+    }
     dragging = null;
     save(); renderRoutes();
     setTimeout(()=>initRouteOrderDrag(rid),100);
@@ -986,36 +1037,48 @@ function renderGenRutaChips() {
     </label>`).join('');
 }
 
-// Cascada: al cambiar la(s) Ruta(s) marcada(s), Departamento se filtra por
-// ellas y Sector deja de aplicar (se limpia, ya que dependía de Departamento)
+// Cascada: al cambiar la(s) Ruta(s) marcada(s), Departamento se refiltra por
+// ellas y queda todo marcado por defecto (y Sector, que depende de
+// Departamento, también)
 function onGenRutaChange() {
-  document.querySelectorAll('.gen-dept-cb:checked').forEach(cb => cb.checked = false);
-  document.querySelectorAll('.gen-mun-cb:checked').forEach(cb => cb.checked = false);
-  renderGenChips('dept');
-  renderGenChips('mun');
+  checkAllGenChipsAfterFilter('dept');
+  checkAllGenChipsAfterFilter('mun');
   renderGenOrderList();
 }
 
-// Cascada: al cambiar el/los Departamento(s) marcado(s), Sector se filtra
-// por ellos y se limpia lo que estuviera marcado (podría ya no aplicar)
+// Cascada: al cambiar el/los Departamento(s) marcado(s), Sector se refiltra
+// por ellos y queda todo marcado por defecto
 function onGenDeptChange() {
-  document.querySelectorAll('.gen-mun-cb:checked').forEach(cb => cb.checked = false);
-  renderGenChips('mun');
+  checkAllGenChipsAfterFilter('mun');
   renderGenOrderList();
 }
 
+// Re-filtra un nivel de chips (según lo marcado en el nivel anterior) y
+// deja todas sus opciones resultantes marcadas por defecto.
+function checkAllGenChipsAfterFilter(type) {
+  renderGenChips(type);
+  document.querySelectorAll('.gen-'+type+'-cb').forEach(cb => cb.checked = true);
+  renderGenChips(type);
+}
+
+// Botones "Seleccionar todos" / "Limpiar": actúan solo sobre su propio
+// nivel; el siguiente nivel simplemente se refiltra, sin forzar su estado.
 function selectAllGenChips(type) {
   document.querySelectorAll('.gen-'+type+'-cb').forEach(cb => cb.checked = true);
-  if (type==='ruta') onGenRutaChange();
-  else if (type==='dept') onGenDeptChange();
-  else { renderGenChips('mun'); renderGenOrderList(); }
+  renderGenChips(type);
+  refreshGenChildLevels(type);
 }
 
 function clearGenChips(type) {
   document.querySelectorAll('.gen-'+type+'-cb').forEach(cb => cb.checked = false);
-  if (type==='ruta') onGenRutaChange();
-  else if (type==='dept') onGenDeptChange();
-  else { renderGenChips('mun'); renderGenOrderList(); }
+  renderGenChips(type);
+  refreshGenChildLevels(type);
+}
+
+function refreshGenChildLevels(type) {
+  if (type==='ruta') { renderGenChips('dept'); renderGenChips('mun'); }
+  else if (type==='dept') { renderGenChips('mun'); }
+  renderGenOrderList();
 }
 
 function renderGenChips(type) {
@@ -1063,6 +1126,11 @@ function filterGenChips(type) { renderGenChips(type); }
 // Vive en el panel "Generar Pedidos": lista plana (sin agrupar por
 // Departamento) que se arrastra para definir el orden y se guarda
 // asociada a la ruta que se está creando en ese momento.
+//
+// Además, cada vez que arrastras, se actualiza S.genMunOrderTemplate: una
+// plantilla general que recuerda tu orden preferido de Sectores y se usa
+// para pre-ordenar automáticamente la próxima vez que generes cualquier
+// ruta, para no tener que rehacerlo cada vez.
 function resetGenOrderState() {
   window._genMunOrder = [];
 }
@@ -1072,10 +1140,8 @@ function resetGenOrderState() {
 // defecto. Debe llamarse después de renderRoutes(), para que los chips
 // ya existan en el DOM.
 function applyGenDefaultSelection() {
-  document.querySelectorAll('.gen-dept-cb').forEach(cb => cb.checked = true);
-  renderGenChips('dept');
-  document.querySelectorAll('.gen-mun-cb').forEach(cb => cb.checked = true);
-  renderGenChips('mun');
+  checkAllGenChipsAfterFilter('dept');
+  checkAllGenChipsAfterFilter('mun');
   renderGenOrderList();
 }
 
@@ -1098,8 +1164,14 @@ function renderGenOrderList() {
   const relevantIds = relevantMuns.map(m=>m.id);
 
   if (!window._genMunOrder) window._genMunOrder = [];
-  // Conservar el orden ya arrastrado; quitar lo que ya no aplica, agregar lo nuevo al final
+  // Conservar el orden ya arrastrado en esta sesión; quitar lo que ya no aplica
   window._genMunOrder = window._genMunOrder.filter(id => relevantIds.includes(id));
+  // Los sectores relevantes que aún no están en esta sesión, se agregan
+  // siguiendo la plantilla guardada (si la tienen) para no partir de cero
+  const template = S.genMunOrderTemplate || [];
+  const fromTemplate = template.filter(id => relevantIds.includes(id) && !window._genMunOrder.includes(id));
+  window._genMunOrder = [...window._genMunOrder, ...fromTemplate];
+  // Cualquier sector relevante que ni siquiera esté en la plantilla, al final
   relevantIds.forEach(id => { if (!window._genMunOrder.includes(id)) window._genMunOrder.push(id); });
 
   const munRows = window._genMunOrder.map(mid => {
@@ -1111,13 +1183,21 @@ function renderGenOrderList() {
     </div>`;
   }).join('');
 
-  wrap.innerHTML = `<div style="font-size:10px;color:#64748b;margin-bottom:6px">Mantén presionado ≡ para arrastrar y definir el orden de visita de los Sectores (sin importar su Departamento)</div>${munRows||'<div style="font-size:11px;color:#64748b">Sin sectores para ordenar.</div>'}`;
+  wrap.innerHTML = `<div style="font-size:10px;color:#64748b;margin-bottom:6px">Mantén presionado ≡ para arrastrar. Este orden se recuerda para las próximas rutas que generes.</div>${munRows||'<div style="font-size:11px;color:#64748b">Sin sectores para ordenar.</div>'}`;
 
   setupDrag(wrap, saveGenMunOrderFromDOM, 'gen-mun-order-item');
 }
 
 function saveGenMunOrderFromDOM(container) {
-  window._genMunOrder = [...container.querySelectorAll('.gen-mun-order-item')].map(el => Number(el.dataset.id));
+  const ids = [...container.querySelectorAll('.gen-mun-order-item')].map(el => Number(el.dataset.id));
+  window._genMunOrder = ids;
+  // Actualizar la plantilla general reutilizable: el grupo recién ordenado
+  // se reubica al final de la plantilla, en su nuevo orden relativo; lo
+  // demás que ya estaba en la plantilla conserva su posición entre sí.
+  if (!S.genMunOrderTemplate) S.genMunOrderTemplate = [];
+  const rest = S.genMunOrderTemplate.filter(id => !ids.includes(id));
+  S.genMunOrderTemplate = [...rest, ...ids];
+  save();
 }
 
 function toggleGenSection(bodyId, arrowId) {
