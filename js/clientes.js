@@ -396,6 +396,7 @@ function toggleCliSec(id) {
   window._cliSecOpen[id] = opening;
   const el = document.getElementById(id);
   if (el) el.style.display = opening ? 'block' : 'none';
+  if (opening) initOpenClientSortSections();
 }
 
 function renderClients() {
@@ -412,6 +413,7 @@ function renderClients() {
     ncPrioSel.value = curVal;
   }
   _renderClientsInternal();
+  initOpenClientSortSections();
   if (floatCid) {
     setTimeout(() => restoreFloatingCard(floatCid), 50);
   }
@@ -632,7 +634,8 @@ ${(()=>{
     const isDefault = (S.defaultAddresses && S.defaultAddresses[c.id] === i);
     const isPrincipal = (S.principalAddresses && S.principalAddresses[c.id] === i);
     return `
-    <div style="display:flex;align-items:center;gap:6px;margin-bottom:5px;background:#161929;border-radius:7px;padding:6px 10px;border:1px solid ${isDefault?'#f59e0b':'transparent'}">
+    <div class="sortable-item cli-addr-item" data-idx="${i}" style="display:flex;align-items:center;gap:6px;margin-bottom:5px;background:#161929;border-radius:7px;padding:6px 10px;border:1px solid ${isDefault?'#f59e0b':'transparent'}">
+      <span class="drag-handle" style="font-size:14px;flex-shrink:0">≡</span>
       <span onclick="setPrincipalAddress(${c.id},${i})" style="cursor:pointer;flex-shrink:0;font-size:10px;font-weight:700;padding:2px 7px;border-radius:9px;background:${isPrincipal?'#14532d':'#1e2333'};color:${isPrincipal?'#4ade80':'#64748b'};border:1px solid ${isPrincipal?'#22c55e':'#334155'}" title="Marcar como dirección Fiscal">Fiscal</span>
       <span style="flex:1;font-size:12px;color:#f1f5f9">${isDefault?'⭐ ':''}${addr}</span>
       <button onclick="setDefaultAddress(${c.id},${i})" style="background:none;border:none;color:${isDefault?'#f59e0b':'#475569'};cursor:pointer;font-size:13px;padding:0 4px" title="Favorita (formulario de pedidos)">${isDefault?'⭐':'☆'}</button>
@@ -645,6 +648,7 @@ ${(()=>{
       <span style="color:#64748b;font-size:11px">▼</span>
     </div>
     <div id="csd-${c.id}" style="display:${(window._cliSecOpen&&window._cliSecOpen['csd-'+c.id])?'block':'none'}">
+    ${addrs.length>1?`<div style="font-size:10px;color:#64748b;margin-bottom:6px;text-align:center">Mantén presionado ≡ para arrastrar y reordenar</div>`:''}
     ${addrRows || '<div style="font-size:11px;color:#64748b;margin-bottom:6px">Sin direcciones guardadas.</div>'}
     <div style="display:flex;gap:6px;margin-top:4px">
       <input class="inp" id="new-cli-addr-${c.id}" placeholder="Nueva dirección..." style="margin-bottom:0;flex:1;font-size:12px"/>
@@ -767,9 +771,10 @@ ${(()=>{
   const notes = S.clientNotesArr[c.id] || [];
   const noteRows = notes.map((n,i) => {
     const isOpen = window._noteOpen && window._noteOpen[`${c.id}_${i}`];
-    return `<div style="background:#0d0f18;border:1px solid #2a3050;border-radius:8px;margin-bottom:6px;overflow:hidden">
+    return `<div class="sortable-item cli-note-item" data-idx="${i}" style="background:#0d0f18;border:1px solid #2a3050;border-radius:8px;margin-bottom:6px;overflow:hidden">
       <div onclick="toggleCliNote(${c.id},${i})" style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;cursor:pointer">
-        <span style="font-size:12px;color:#f1f5f9;font-weight:600">${n.title||'Sin título'}</span>        <div style="display:flex;gap:6px;align-items:center">
+        <span class="drag-handle" style="font-size:14px;flex-shrink:0;margin-right:6px">≡</span>
+        <span style="font-size:12px;color:#f1f5f9;font-weight:600;flex:1">${n.title||'Sin título'}</span>        <div style="display:flex;gap:6px;align-items:center">
           <button onclick="event.stopPropagation();deleteCliNote(${c.id},${i})" style="background:none;border:none;color:#ef4444;cursor:pointer;font-size:13px;padding:0 2px">✕</button>
           <span style="color:#64748b;font-size:11px">${isOpen?'▲':'▼'}</span>
         </div>
@@ -793,6 +798,7 @@ ${(()=>{
       <span style="color:#64748b;font-size:11px">▼</span>
     </div>
     <div id="csn-${c.id}" style="display:${(window._cliSecOpen&&window._cliSecOpen['csn-'+c.id])?'block':'none'}">
+      ${notes.length>1?`<div style="font-size:10px;color:#64748b;margin-bottom:6px;text-align:center">Mantén presionado ≡ para arrastrar y reordenar</div>`:''}
       ${noteRows||'<div style="font-size:11px;color:#64748b;margin-bottom:6px">Sin notas.</div>'}
       <button onclick="addCliNote(${c.id})" style="width:100%;padding:7px;background:transparent;border:1px dashed #3b82f6;border-radius:6px;color:#60a5fa;font-size:12px;cursor:pointer;margin-top:4px">+ Agregar nota</button>
     </div>
@@ -1378,6 +1384,54 @@ function migrateSoloUnaEsFiscal() {
   let changed = false;
   S.clients.forEach(c => { if (enforceSoloUnaEsFiscal(c.id)) changed = true; });
   if (changed) save();
+}
+
+// Guarda el nuevo orden de la lista de Direcciones tras arrastrar. Remapea
+// los índices de Favorita (⭐) y Fiscal, ya que ambos se guardan por
+// posición y esa posición cambia al reordenar.
+function saveClientAddrOrder(container, cid) {
+  if (!S.savedAddresses || !S.savedAddresses[cid]) return;
+  const oldIdxs = [...container.querySelectorAll('.cli-addr-item')].map(el => Number(el.dataset.idx));
+  const arr = S.savedAddresses[cid];
+  S.savedAddresses[cid] = oldIdxs.map(i => arr[i]);
+  if (S.defaultAddresses && S.defaultAddresses[cid] !== undefined) {
+    const ni = oldIdxs.indexOf(S.defaultAddresses[cid]);
+    if (ni !== -1) S.defaultAddresses[cid] = ni; else delete S.defaultAddresses[cid];
+  }
+  if (S.principalAddresses && S.principalAddresses[cid] !== undefined) {
+    const ni = oldIdxs.indexOf(S.principalAddresses[cid]);
+    if (ni !== -1) S.principalAddresses[cid] = ni; else delete S.principalAddresses[cid];
+  }
+  save(); renderClients();
+}
+
+// Guarda el nuevo orden de la lista de Notas tras arrastrar.
+function saveClientNotesOrder(container, cid) {
+  if (!S.clientNotesArr || !S.clientNotesArr[cid]) return;
+  const oldIdxs = [...container.querySelectorAll('.cli-note-item')].map(el => Number(el.dataset.idx));
+  const arr = S.clientNotesArr[cid];
+  S.clientNotesArr[cid] = oldIdxs.map(i => arr[i]);
+  // Las notas abiertas para edición se identifican por posición; al
+  // reordenar, cerrar cualquier nota abierta de este cliente para evitar
+  // que quede mostrando el contenido de otra nota por error.
+  if (window._noteOpen) {
+    Object.keys(window._noteOpen).forEach(k => { if (k.startsWith(cid+'_')) delete window._noteOpen[k]; });
+  }
+  save(); renderClients();
+}
+
+// Activa el arrastre para las secciones de Direcciones/Notas que estén
+// abiertas. Se llama tras cada render, ya que el DOM se reconstruye.
+function initOpenClientSortSections() {
+  if (!window._cliSecOpen) return;
+  Object.keys(window._cliSecOpen).forEach(id => {
+    if (!window._cliSecOpen[id]) return;
+    const cid = Number(id.split('-').pop());
+    const el = document.getElementById(id);
+    if (!el) return;
+    if (id.startsWith('csd-')) setupDrag(el, (c) => saveClientAddrOrder(c, cid), 'cli-addr-item');
+    else if (id.startsWith('csn-')) setupDrag(el, (c) => saveClientNotesOrder(c, cid), 'cli-note-item');
+  });
 }
 
 // Sincroniza el campo "Dirección" de la ficha del cliente hacia su listado

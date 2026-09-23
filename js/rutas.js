@@ -48,6 +48,7 @@ function renderRoutes() {
   renderGenChips('dept');
   renderGenChips('mun');
   renderGenRutaChips();
+  renderGenOrderList();
 
   if (!S.routes.length) {
     wrap.innerHTML = '<div style="text-align:center;color:#64748b;padding:24px 0">Sin rutas creadas. Agrega una arriba.</div>';
@@ -74,11 +75,25 @@ function renderRoutes() {
     const rSort2 = typeof rSortRaw==='object' ? (rSortRaw.s2||'none')    : 'none';
     const rSort3 = typeof rSortRaw==='object' ? (rSortRaw.s3||'none')    : 'none';
     const rSort  = rSort1;
+    // Orden manual de Departamentos/Sectores definido para esta ruta (si existe)
+    const deptOrder = (S.routeDeptOrder && S.routeDeptOrder[r.id]) || null;
+    const munOrder  = (S.routeMunOrder  && S.routeMunOrder[r.id]) || null;
     const _getSortVal = (o,key) => {
       const cli = S.clients.find(c=>c.id===o.clientId)||{};
       if (key==='alpha')  return (o.clientName||'').toLowerCase();
-      if (key==='dept')   return ((S.depts||[]).find(x=>x.id===cli.deptId)||{name:''}).name.toLowerCase();
-      if (key==='mun')    return ((S.municipios||[]).find(x=>x.id===cli.municipioId)||{name:''}).name.toLowerCase();
+      if (key==='dept') {
+        const d = (S.depts||[]).find(x=>x.id===cli.deptId);
+        let rank = 999999;
+        if (deptOrder) { const ix = deptOrder.indexOf(Number(cli.deptId)); if (ix!==-1) rank = ix; }
+        return String(rank).padStart(6,'0') + '_' + (d?d.name.toLowerCase():'');
+      }
+      if (key==='mun') {
+        const m = (S.municipios||[]).find(x=>x.id===cli.municipioId);
+        let rank = 999999;
+        const ord = munOrder && munOrder[cli.deptId];
+        if (ord) { const ix = ord.indexOf(Number(cli.municipioId)); if (ix!==-1) rank = ix; }
+        return String(rank).padStart(6,'0') + '_' + (m?m.name.toLowerCase():'');
+      }
       if (key==='ruta')   return ((S.rutasCliente||[]).find(x=>x.id===cli.rutaClienteId)||{name:''}).name.toLowerCase();
       if (key==='recent') return -ordDateTs(o);
       if (key==='old')    return  ordDateTs(o);
@@ -740,9 +755,22 @@ function generateRouteReport(rid, selIds, returnHTML=false) {
   const rSort3 = typeof rSortRaw==='object' ? (rSortRaw.s3||'none')    : 'none';
   const _gsv = (o,key) => {
     const cli = S.clients.find(c=>c.id===o.clientId)||{};
+    const deptOrder = (S.routeDeptOrder && S.routeDeptOrder[rid]) || null;
+    const munOrder  = (S.routeMunOrder  && S.routeMunOrder[rid]) || null;
     if (key==='alpha')  return (o.clientName||'').toLowerCase();
-    if (key==='dept')   return ((S.depts||[]).find(x=>x.id===cli.deptId)||{name:''}).name.toLowerCase();
-    if (key==='mun')    return ((S.municipios||[]).find(x=>x.id===cli.municipioId)||{name:''}).name.toLowerCase();
+    if (key==='dept') {
+      const d = (S.depts||[]).find(x=>x.id===cli.deptId);
+      let rank = 999999;
+      if (deptOrder) { const ix = deptOrder.indexOf(Number(cli.deptId)); if (ix!==-1) rank = ix; }
+      return String(rank).padStart(6,'0') + '_' + (d?d.name.toLowerCase():'');
+    }
+    if (key==='mun') {
+      const m = (S.municipios||[]).find(x=>x.id===cli.municipioId);
+      let rank = 999999;
+      const ord = munOrder && munOrder[cli.deptId];
+      if (ord) { const ix = ord.indexOf(Number(cli.municipioId)); if (ix!==-1) rank = ix; }
+      return String(rank).padStart(6,'0') + '_' + (m?m.name.toLowerCase():'');
+    }
     if (key==='ruta')   return ((S.rutasCliente||[]).find(x=>x.id===cli.rutaClienteId)||{name:''}).name.toLowerCase();
     if (key==='recent') return -ordDateTs(o);
     if (key==='old')    return  ordDateTs(o);
@@ -917,25 +945,62 @@ function renderGenRutaChips() {
   if (!wrap) return;
   wrap.innerHTML = (S.rutasCliente || []).map(r => `
     <label style="display:flex;align-items:center;gap:5px;background:#0d2010;border:1px solid #1a3a1a;border-radius:8px;padding:5px 10px;cursor:pointer;font-size:13px;color:#f1f5f9">
-      <input type="checkbox" class="gen-ruta-cb" value="${r.id}" style="accent-color:#10b981"/> ${r.name}
+      <input type="checkbox" class="gen-ruta-cb" value="${r.id}" style="accent-color:#10b981" onchange="onGenRutaChange()"/> ${r.name}
     </label>`).join('');
+}
+
+// Cascada: al cambiar la(s) Ruta(s) marcada(s), Departamento se filtra por
+// ellas y Sector deja de aplicar (se limpia, ya que dependía de Departamento)
+function onGenRutaChange() {
+  document.querySelectorAll('.gen-dept-cb:checked').forEach(cb => cb.checked = false);
+  document.querySelectorAll('.gen-mun-cb:checked').forEach(cb => cb.checked = false);
+  renderGenChips('dept');
+  renderGenChips('mun');
+  renderGenOrderList();
+}
+
+// Cascada: al cambiar el/los Departamento(s) marcado(s), Sector se filtra
+// por ellos y se limpia lo que estuviera marcado (podría ya no aplicar)
+function onGenDeptChange() {
+  document.querySelectorAll('.gen-mun-cb:checked').forEach(cb => cb.checked = false);
+  renderGenChips('mun');
+  renderGenOrderList();
 }
 
 function renderGenChips(type) {
   const wrap = document.getElementById('gen-'+type+'-checks');
   if (!wrap) return;
   const q    = (document.getElementById('gen-'+type+'-search')?.value||'').toLowerCase();
-  const list = type==='dept' ? (S.depts||[]) : (S.municipios||[]);
+  let list = type==='dept' ? (S.depts||[]) : (S.municipios||[]);
   const cls  = 'gen-'+type+'-cb';
   const col  = type==='dept' ? '#10b981' : '#7c3aed';
   const bg   = type==='dept' ? '#0d1f0d' : '#0d0d1f';
   const bdr  = type==='dept' ? '#1a3a1a' : '#1a1a3a';
-  if (!list.length) { wrap.innerHTML='<span style="font-size:11px;color:#64748b">Sin '+(type==='dept'?'departamentos':'sectores')+' creados</span>'; return; }
+
+  // Cascada: Departamento se filtra por la(s) Ruta(s) marcada(s);
+  // Sector se filtra por el/los Departamento(s) marcado(s).
+  // Si no hay nada marcado en el nivel anterior, se muestran todas
+  // las opciones (igual que hoy: "vacío = todos").
+  if (type === 'dept') {
+    const selRutas = [...document.querySelectorAll('.gen-ruta-cb:checked')].map(cb => Number(cb.value));
+    if (selRutas.length) list = list.filter(d => (d.rutaIds||[]).some(rid => selRutas.includes(rid)));
+  } else {
+    const selDepts = [...document.querySelectorAll('.gen-dept-cb:checked')].map(cb => Number(cb.value));
+    if (selDepts.length) list = list.filter(m => (m.deptIds||[]).some(did => selDepts.includes(did)));
+  }
+
+  if (!list.length) {
+    const msg = type==='dept' ? 'Sin departamentos en la(s) ruta(s) marcada(s)' : 'Sin sectores en el/los departamento(s) marcado(s)';
+    wrap.innerHTML = '<span style="font-size:11px;color:#64748b">'+msg+'</span>';
+    return;
+  }
   // Mantener estado de checks existentes antes de re-render
   const checked = new Set([...document.querySelectorAll('.'+cls+':checked')].map(cb=>cb.value));
   const filtered = q ? list.filter(x=>x.name.toLowerCase().includes(q)) : list;
+  if (!filtered.length) { wrap.innerHTML='<span style="font-size:11px;color:#64748b">Sin resultados</span>'; return; }
+  const cascadeCall = type==='dept' ? ';onGenDeptChange()' : ';renderGenOrderList()';
   wrap.innerHTML = filtered.map(x=>
-    `<label style="display:flex;align-items:center;gap:5px;background:${checked.has(String(x.id))?col+'33':bg};border:1px solid ${checked.has(String(x.id))?col:bdr};border-radius:8px;padding:6px 10px;cursor:pointer;font-size:12px;color:#f1f5f9;transition:all .15s" onclick="this.querySelector('input').checked=!this.querySelector('input').checked;this.style.background=this.querySelector('input').checked?'${col}33':'${bg}';this.style.borderColor=this.querySelector('input').checked?'${col}':'${bdr}'">
+    `<label style="display:flex;align-items:center;gap:5px;background:${checked.has(String(x.id))?col+'33':bg};border:1px solid ${checked.has(String(x.id))?col:bdr};border-radius:8px;padding:6px 10px;cursor:pointer;font-size:12px;color:#f1f5f9;transition:all .15s" onclick="this.querySelector('input').checked=!this.querySelector('input').checked;this.style.background=this.querySelector('input').checked?'${col}33':'${bg}';this.style.borderColor=this.querySelector('input').checked?'${col}':'${bdr}'${cascadeCall}">
       <input type="checkbox" class="${cls}" value="${x.id}" ${checked.has(String(x.id))?'checked':''} style="width:15px;height:15px;accent-color:${col};pointer-events:none"/> ${x.name}
     </label>`
   ).join('');
@@ -943,6 +1008,78 @@ function renderGenChips(type) {
 
 function filterGenChips(type) { renderGenChips(type); }
 
+// ── Orden de visita (Departamentos y Sectores), definido al generar ──
+// Vive en el panel "Generar Pedidos": se arrastra para definir el orden
+// y se guarda asociado a la ruta que se está creando en ese momento.
+function resetGenOrderState() {
+  window._genDeptOrder = [];
+  window._genMunOrder = {};
+}
+
+function renderGenOrderList() {
+  const wrap = document.getElementById('gen-order-list');
+  if (!wrap) return;
+  const selDepts = [...document.querySelectorAll('.gen-dept-cb:checked')].map(cb => Number(cb.value));
+  const selMuns  = [...document.querySelectorAll('.gen-mun-cb:checked')].map(cb => Number(cb.value));
+
+  if (!selDepts.length) {
+    wrap.innerHTML = '<div style="font-size:11px;color:#64748b">Marca uno o más Departamentos arriba para poder definir su orden de visita.</div>';
+    return;
+  }
+
+  if (!window._genDeptOrder) window._genDeptOrder = [];
+  if (!window._genMunOrder)  window._genMunOrder  = {};
+  // Conservar el orden ya arrastrado; quitar lo desmarcado, agregar lo nuevo al final
+  window._genDeptOrder = window._genDeptOrder.filter(id => selDepts.includes(id));
+  selDepts.forEach(id => { if (!window._genDeptOrder.includes(id)) window._genDeptOrder.push(id); });
+
+  const deptBlocks = window._genDeptOrder.map(did => {
+    const d = (S.depts||[]).find(x=>x.id===did);
+    if (!d) return '';
+    const munsOfDept = (S.municipios||[]).filter(m => (m.deptIds||[]).includes(did));
+    const checkedMunsOfDept = munsOfDept.filter(m => selMuns.includes(m.id));
+    const relevantMuns = checkedMunsOfDept.length ? checkedMunsOfDept : munsOfDept;
+    const relevantIds = relevantMuns.map(m=>m.id);
+
+    if (!window._genMunOrder[did]) window._genMunOrder[did] = [];
+    window._genMunOrder[did] = window._genMunOrder[did].filter(id => relevantIds.includes(id));
+    relevantIds.forEach(id => { if (!window._genMunOrder[did].includes(id)) window._genMunOrder[did].push(id); });
+
+    const munRows = window._genMunOrder[did].map(mid => {
+      const m = (S.municipios||[]).find(x=>x.id===mid);
+      if (!m) return '';
+      return `<div class="sortable-item gen-mun-order-item" data-id="${mid}" style="display:flex;align-items:center;gap:6px;background:#0d0d1f;border:1px solid #1a1a3a;border-radius:6px;padding:4px 8px;margin-bottom:4px">
+        <span class="drag-handle" style="font-size:13px">≡</span>
+        <span style="flex:1;font-size:11px;color:#f1f5f9">🏘️ ${m.name}</span>
+      </div>`;
+    }).join('');
+
+    return `<div class="sortable-item gen-dept-order-item" data-id="${did}" style="background:#0d1f0d;border:1px solid #1a3a1a;border-radius:8px;padding:8px;margin-bottom:8px">
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:${munRows?'6px':'0'}">
+        <span class="drag-handle" style="font-size:15px">≡</span>
+        <span style="flex:1;font-size:12px;font-weight:700;color:#f1f5f9">🏛️ ${d.name}</span>
+      </div>
+      ${munRows?`<div class="gen-mun-order-list" data-dept="${did}" style="margin-left:20px">${munRows}</div>`:''}
+    </div>`;
+  }).join('');
+
+  wrap.innerHTML = `<div style="font-size:10px;color:#64748b;margin-bottom:6px">Mantén presionado ≡ para arrastrar y definir el orden de visita (Departamentos y, dentro de cada uno, sus Sectores)</div>${deptBlocks}`;
+
+  setupDrag(wrap, saveGenDeptOrderFromDOM, 'gen-dept-order-item');
+  wrap.querySelectorAll('.gen-mun-order-list').forEach(el => {
+    const did = Number(el.dataset.dept);
+    setupDrag(el, (c) => saveGenMunOrderFromDOM(c, did), 'gen-mun-order-item');
+  });
+}
+
+function saveGenDeptOrderFromDOM(container) {
+  window._genDeptOrder = [...container.querySelectorAll('.gen-dept-order-item')].map(el => Number(el.dataset.id));
+}
+
+function saveGenMunOrderFromDOM(container, did) {
+  if (!window._genMunOrder) window._genMunOrder = {};
+  window._genMunOrder[did] = [...container.querySelectorAll('.gen-mun-order-item')].map(el => Number(el.dataset.id));
+}
 
 function toggleGenSection(bodyId, arrowId) {
   const body = document.getElementById(bodyId);
@@ -966,8 +1103,22 @@ function generateRouteOrdersFromPanel() {
   const newRoute = { id: S.nextRid++, name: routeName, orders: [] };
   S.routes.push(newRoute);
 
+  // Guardar el orden manual de Departamentos/Sectores definido en el panel,
+  // asociado a esta ruta (se usará al ordenar sus pedidos por Departamento/Sector)
+  if (!S.routeDeptOrder) S.routeDeptOrder = {};
+  if (!S.routeMunOrder)  S.routeMunOrder  = {};
+  if (window._genDeptOrder && window._genDeptOrder.length) {
+    S.routeDeptOrder[newRoute.id] = [...window._genDeptOrder];
+  }
+  if (window._genMunOrder && Object.keys(window._genMunOrder).length) {
+    const munOrderForRoute = {};
+    Object.keys(window._genMunOrder).forEach(did => { munOrderForRoute[did] = [...window._genMunOrder[did]]; });
+    S.routeMunOrder[newRoute.id] = munOrderForRoute;
+  }
+
   generateRouteOrders(newRoute.id, routeName, selDepts, selMuns, selRutas);
   document.getElementById('gen-route-name').value = '';
+  resetGenOrderState();
 }
 
 function generateRouteOrders(rid, routeTitle, selDepts, selMuns, selRutas) {
