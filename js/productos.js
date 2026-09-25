@@ -172,6 +172,10 @@ ${(S.familyList||[]).map(f=>`<option value="${f}" ${p.family===f?'selected':''}>
 <input type="checkbox" id="epfamrestricted-${id}" ${p.family && (S.restrictedFamilies||[]).includes(p.family.trim()) ? 'checked' : ''} style="width:17px;height:17px;accent-color:#f59e0b"/>
 <span style="font-size:12px;color:#f59e0b;font-weight:700">🔒 Familia restringida (requiere permiso especial del cliente)</span>
 </label>
+<label style="display:flex;align-items:center;gap:8px;background:#1a1030;border:1px solid #7c3aed;border-radius:8px;padding:8px 10px;margin-bottom:12px;cursor:pointer">
+<input type="checkbox" id="epfacturakilo-${id}" ${p.facturaPorKilo ? 'checked' : ''} style="width:17px;height:17px;accent-color:#7c3aed"/>
+<span style="font-size:12px;color:#a78bfa;font-weight:700">⚖️ Se factura por kilo (para "Calcular para SAP")</span>
+</label>
 <label class="lbl">Unidad de precio</label>
 <input class="inp" id="epul-${id}" value="${p.unitLabel||'unidad'}"/>
 <label class="lbl">Unidades por especificación</label>
@@ -245,6 +249,7 @@ p.family       = document.getElementById('epfam-'+id).value.trim();
 p.unitLabel    = document.getElementById('epul-'+id).value.trim() || 'unidad';
 p.unitSize     = Number(document.getElementById('epus-'+id).value) || 1;
 p.basePrice    = Number(document.getElementById('eppr-'+id).value);
+p.facturaPorKilo = document.getElementById('epfacturakilo-'+id)?.checked || false;
 syncProdSpecsFromDOM(id);
 const specsIn = (window._editingSpecs[id]||[]).filter(s => (s.label||'').trim());
 if (!specsIn.length) { toast('Agrega al menos una especificación con nombre','#ef4444'); return; }

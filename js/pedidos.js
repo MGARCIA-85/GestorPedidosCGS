@@ -492,6 +492,7 @@ function chooseSpec(i, val) {
   if (!ordItems[i]) return;
   ordItems[i].specId = val ? Number(val) : null;
   refreshSub(i, Number(document.getElementById('ord-cli').value));
+  renderSapCalc();
 }
 function setPrice(i, val) {
 if(!ordItems[i]) return;
@@ -748,6 +749,110 @@ const has = ordItems.some(it => it.pid) || (ordBonusLines && ordBonusLines.lengt
 if (!has) { box.style.display='none'; return; }
 box.style.display = 'block';
 refreshTotalWithIVA();
+renderSapCalc();
+}
+
+// ── Calcular para SAP ───────────────────────────────────────────────────
+// Capa de SOLO LECTURA sobre el pedido actual: NO modifica ordItems,
+// ordBonusLines, ni nada que se vaya a guardar. Solo muestra, para cada
+// línea (incluidas bonificaciones, que se facturan a valor normal), la
+// cantidad y precio sin IVA a 2 decimales tal como deben capturarse en
+// SAP — en kilos si el producto está marcado "Se factura por kilo", o en
+// la unidad de venta normal si no. Cuando el botón no está activo, nada
+// de esto se ejecuta y el resto del formulario funciona exactamente igual
+// que siempre.
+function resetSapCalcUI() {
+  window._sapCalcOpen = false;
+  const panel = document.getElementById('ord-sap-panel');
+  const roundRow = document.getElementById('ord-sap-round-row');
+  const btn = document.getElementById('btn-sap-calc');
+  const roundChk = document.getElementById('ord-sap-round');
+  if (panel) { panel.style.display = 'none'; panel.innerHTML = ''; }
+  if (roundRow) roundRow.style.display = 'none';
+  if (btn) { btn.style.background = 'transparent'; btn.style.color = '#a78bfa'; }
+  if (roundChk) roundChk.checked = false;
+  window._sapRoundMode = 'floor';
+}
+function toggleSapCalc() {
+  window._sapCalcOpen = !window._sapCalcOpen;
+  const panel = document.getElementById('ord-sap-panel');
+  const roundRow = document.getElementById('ord-sap-round-row');
+  const btn = document.getElementById('btn-sap-calc');
+  if (panel)   panel.style.display = window._sapCalcOpen ? 'block' : 'none';
+  if (roundRow) roundRow.style.display = window._sapCalcOpen ? 'block' : 'none';
+  if (btn) { btn.style.background = window._sapCalcOpen ? '#7c3aed' : 'transparent'; btn.style.color = window._sapCalcOpen ? '#fff' : '#a78bfa'; }
+  if (window._sapCalcOpen) renderSapCalc();
+}
+
+function _sapFmtQty(n) {
+  return (Math.abs(n - Math.round(n)) < 0.005) ? String(Math.round(n)) : n.toFixed(2);
+}
+
+function renderSapCalc() {
+  const panel = document.getElementById('ord-sap-panel');
+  if (!panel || !window._sapCalcOpen) return;
+  const cid = Number(document.getElementById('ord-cli').value);
+  const roundMode = window._sapRoundMode || 'floor';
+  const roundFn = (n) => roundMode === 'round' ? Math.round(n*100)/100 : Math.floor(n*100)/100;
+
+  function calcLine(p, qty, priceWithIva, weightKgPerQty) {
+    if (!p || !qty || priceWithIva == null) return null;
+    const unitSize = Number(p.unitSize) || 1;
+    const totalUnits = Number(qty) * unitSize;
+    const lineTotalWithIva = totalUnits * Number(priceWithIva);
+    let sapQty, sapUnitLabel;
+    if (p.facturaPorKilo) {
+      const w = weightKgPerQty != null ? Number(weightKgPerQty) : Number(p.weightKg || 0);
+      sapQty = Number(qty) * w;
+      sapUnitLabel = 'kg';
+    } else {
+      sapQty = totalUnits;
+      sapUnitLabel = p.unitLabel || 'unidad';
+    }
+    if (!sapQty) return null;
+    const sapPriceWithIva = lineTotalWithIva / sapQty;
+    const sapPriceNoIva = roundFn(sapPriceWithIva / 1.12);
+    const sapLineTotalWithIva = sapQty * sapPriceNoIva * 1.12;
+    return { sapQty, sapUnitLabel, sapPriceNoIva, sapLineTotalWithIva };
+  }
+
+  let rows = '';
+  let grand = 0;
+
+  ordItems.filter(it => it.pid && Number(it.qty) > 0).forEach(it => {
+    const p = S.products.find(x => x.id === Number(it.pid));
+    if (!p) return;
+    ensureProductSpecs(p);
+    const chosenSpec = p.specs.find(s => String(s.id)===String(it.specId)) || p.specs.filter(s=>s.active)[0] || p.specs[0];
+    const priceWithIva = it.price != null ? it.price : cliPrice(cid, p.id, p.basePrice);
+    const r = calcLine(p, it.qty, priceWithIva, chosenSpec ? chosenSpec.weightKg : null);
+    if (!r) return;
+    grand += r.sapLineTotalWithIva;
+    rows += `<div class="prow"><span style="color:#f1f5f9">${p.name}${chosenSpec?' ('+chosenSpec.label+')':''}</span><span style="color:#94a3b8">${_sapFmtQty(r.sapQty)} ${r.sapUnitLabel} × ${Q(r.sapPriceNoIva)}</span></div>`;
+  });
+
+  (ordBonusLines || []).forEach(bl => {
+    const p = S.products.find(x => x.id === Number(bl.productId));
+    if (!p) return;
+    ensureProductSpecs(p);
+    // Las bonificaciones no guardan cuál especificación se usó; se toma la
+    // primera especificación activa como referencia de peso.
+    const chosenSpec = p.specs.filter(s=>s.active)[0] || p.specs[0];
+    const priceWithIva = Number(bl.price) || 0;
+    const r = calcLine(p, bl.qty, priceWithIva, chosenSpec ? chosenSpec.weightKg : null);
+    if (!r) return;
+    grand += r.sapLineTotalWithIva;
+    rows += `<div class="prow"><span style="color:#f59e0b">🎁 ${p.name}${chosenSpec?' ('+chosenSpec.label+')':''}</span><span style="color:#94a3b8">${_sapFmtQty(r.sapQty)} ${r.sapUnitLabel} × ${Q(r.sapPriceNoIva)}</span></div>`;
+  });
+
+  panel.innerHTML = `<div style="background:#1a1030;border:1px solid #7c3aed;border-radius:8px;padding:10px">
+<div style="font-size:11px;color:#a78bfa;margin-bottom:6px">⚖️ Cantidad y precio (sin IVA, 2 decimales) tal como deben ingresarse en SAP. No afecta el pedido ni la cotización que ve el cliente.</div>
+${rows || '<div style="font-size:12px;color:#64748b">Agrega productos para ver el cálculo.</div>'}
+<div class="prow" style="border-top:1px solid #2a3050;margin-top:6px;padding-top:6px">
+<span style="font-weight:800;color:#f1f5f9">TOTAL con IVA (SAP)</span>
+<span style="font-weight:800;color:#10b981">${Q(grand)}</span>
+</div>
+</div>`;
 }
 
 function refreshTotalWithIVA() {
@@ -1001,7 +1106,7 @@ const editedOrd2 = S.orders.find(o=>o.id===editingOid);
 if (editedOrd2) {
   checkBonusAlert(editedOrd2.clientId, editedOrd2.id, null, editedOrd2);
 }
-editingOid = null; ordItems = [{pid:'',qty:1}]; ordBonusLines = [];
+editingOid = null; ordItems = [{pid:'',qty:1}]; ordBonusLines = []; resetSapCalcUI();
 document.getElementById('ord-cli').value = ''; document.getElementById('ord-cli-txt').value = '';
 ordComments = [''];
 document.getElementById('ord-iva').checked = false;
@@ -1215,7 +1320,7 @@ if (!ord.delivery) {
 }
 
 function cancelEdit() {
-editingOid = null; ordItems = [{pid:'',qty:1}]; ordBonusLines = [];
+editingOid = null; ordItems = [{pid:'',qty:1}]; ordBonusLines = []; resetSapCalcUI();
 const _wasDuplicating = !!_duplicatingFrom || !!_duplicatingData || _isDuplicateSession;
 _duplicatingFrom = null; _duplicatingData = null; _isDuplicateSession = false;
 const _prevAlert = document.getElementById('delivery-alert');
