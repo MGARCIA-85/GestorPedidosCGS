@@ -133,17 +133,10 @@ function acProdInput(i) {
     acOpen('ac-prod-drop-'+i); return;
   }
 
-  // Mostrar matches de la lista
-  matches.forEach(p => {
-    const pr = cliPrice(cid, p.id, p.basePrice);
-    const d = document.createElement('div');
-    d.className = 'ac-opt';
-    if (p.color) { d.style.cssText = `border-left:4px solid ${p.color}`; }
-    const nameSpan = p.color ? `<span style="color:${p.color};font-weight:700">${p.name}</span>` : p.name;
-    d.innerHTML = nameSpan + '<small>'+(p.presentation||'')+(p.family?' · '+p.family:'')+' — '+Q(pr)+'</small>';
-    d.onmousedown = () => { txt.value = p.name; acClose('ac-prod-drop-'+i); setPid(i, p.id); };
-    drop.appendChild(d);
-  });
+  // Mostrar matches de la lista (una fila por especificación activa, si el
+  // producto tiene más de una — así se elige producto y especificación en
+  // el mismo paso, sin un selector aparte)
+  matches.forEach(p => appendProdOptions(drop, p, cid, txt, i, { outside:false }));
 
   // Separador + matches fuera de la lista
   if (outsideMatches.length) {
@@ -151,14 +144,9 @@ function acProdInput(i) {
     sep.style.cssText = 'font-size:10px;font-weight:800;color:#f59e0b;padding:6px 12px 2px;text-transform:uppercase;letter-spacing:1px;background:#161929';
     sep.textContent = '+ Fuera de la lista — asignar al agregar';
     drop.appendChild(sep);
-    outsideMatches.forEach(p => {
-      const pr = cliPrice(cid, p.id, p.basePrice);
-      const d = document.createElement('div');
-      d.className = 'ac-opt';
-      d.style.cssText = 'opacity:.85;border-left:3px solid #f59e0b';
-      d.innerHTML = p.name + '<small>'+(p.presentation||'')+(p.family?' · '+p.family:'')+' — '+Q(pr)+'</small>';
-      d.onmousedown = () => {
-        // Asignar a la lista del cliente y agregar al pedido
+    outsideMatches.forEach(p => appendProdOptions(drop, p, cid, txt, i, {
+      outside: true,
+      onExtra: () => {
         const cp2 = S.cp[cid] || {};
         let vis = (cp2._visible || []).map(Number);
         if (!vis.includes(Number(p.id))) vis.push(Number(p.id));
@@ -166,15 +154,58 @@ function acProdInput(i) {
         S.cp[cid] = cp2;
         save();
         toast('📌 '+p.name+' asignado a este cliente','#10b981');
-        txt.value = p.name;
-        acClose('ac-prod-drop-'+i);
-        setPid(i, p.id);
-      };
-      drop.appendChild(d);
-    });
+      }
+    }));
   }
 
   acOpen('ac-prod-drop-'+i);
+}
+
+// Agrega al desplegable del autocompletado de producto una fila (si el
+// producto solo tiene una especificación activa) o una fila por cada
+// especificación activa (si tiene varias), para elegir producto y
+// especificación en el mismo paso.
+function appendProdOptions(drop, p, cid, txt, i, opts) {
+  ensureProductSpecs(p);
+  const activeSpecs = p.specs.filter(s => s.active);
+  const pr = cliPrice(cid, p.id, p.basePrice);
+  const baseStyle = opts.outside ? 'opacity:.85;border-left:3px solid #f59e0b' : (p.color ? `border-left:4px solid ${p.color}` : '');
+  const nameSpan = p.color ? `<span style="color:${p.color};font-weight:700">${p.name}</span>` : p.name;
+
+  if (activeSpecs.length <= 1) {
+    const d = document.createElement('div');
+    d.className = 'ac-opt';
+    if (baseStyle) d.style.cssText = baseStyle;
+    d.innerHTML = nameSpan + '<small>'+(p.presentation||'')+(p.family?' · '+p.family:'')+' — '+Q(pr)+'</small>';
+    d.onmousedown = () => {
+      if (opts.onExtra) opts.onExtra();
+      txt.value = p.name;
+      acClose('ac-prod-drop-'+i);
+      setPidSpec(i, p.id, activeSpecs.length===1 ? activeSpecs[0].id : null);
+    };
+    drop.appendChild(d);
+    return;
+  }
+
+  // Varias especificaciones activas: encabezado con el producto y una fila
+  // por cada especificación para elegir directamente
+  const head = document.createElement('div');
+  head.style.cssText = 'padding:6px 12px 2px;font-size:10px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:.5px' + (opts.outside?';background:#161929':'');
+  head.textContent = p.name + (p.family?' · '+p.family:'');
+  drop.appendChild(head);
+  activeSpecs.forEach(s => {
+    const d = document.createElement('div');
+    d.className = 'ac-opt';
+    d.style.cssText = (baseStyle?baseStyle+';':'') + 'padding-left:22px';
+    d.innerHTML = `<span style="color:${p.color||'#f1f5f9'};font-weight:700">${s.label}</span><small>${s.sku?'SKU '+s.sku+' · ':''}${s.weightKg?s.weightKg+'kg · ':''}${Q(pr)}</small>`;
+    d.onmousedown = () => {
+      if (opts.onExtra) opts.onExtra();
+      txt.value = p.name;
+      acClose('ac-prod-drop-'+i);
+      setPidSpec(i, p.id, s.id);
+    };
+    drop.appendChild(d);
+  });
 }
 
 // ═══════════════════════════════════════════════════════
@@ -413,22 +444,10 @@ opts += '</optgroup>';
 });
 const remBtn = '';
 const selectedP = it.pid ? S.products.find(p=>String(p.id)===String(it.pid)) : null;
-let specSelectHtml = '';
 if (selectedP) {
   ensureProductSpecs(selectedP);
   const activeSpecs = selectedP.specs.filter(s => s.active);
-  if (activeSpecs.length > 1) {
-    specSelectHtml = `
-<div style="margin-top:8px">
-  <label class="lbl">Especificación</label>
-  <select class="inp" style="margin-bottom:0" onchange="setSpecId(${i}, this.value)">
-    <option value="">-- Selecciona especificación --</option>
-    ${activeSpecs.map(s=>`<option value="${s.id}" ${String(it.specId)===String(s.id)?'selected':''}>${s.label}${s.sku?' · SKU '+s.sku:''}${s.weightKg?' · '+s.weightKg+'kg':''}</option>`).join('')}
-  </select>
-</div>`;
-  } else if (activeSpecs.length === 1 && it.specId == null) {
-    it.specId = activeSpecs[0].id;
-  }
+  if (activeSpecs.length === 1 && it.specId == null) it.specId = activeSpecs[0].id;
 }
 const moveUpBtn = i > 0 ? `<button type="button" onclick="moveItemUp(${i})" style="background:#2a3050;border:none;border-radius:5px;color:#94a3b8;width:26px;height:26px;font-size:13px;cursor:pointer">▲</button>` : `<div style="width:26px;height:26px"></div>`;
 const moveDownBtn = i < ordItems.length-1 ? `<button type="button" onclick="moveItemDown(${i})" style="background:#2a3050;border:none;border-radius:5px;color:#94a3b8;width:26px;height:26px;font-size:13px;cursor:pointer">▼</button>` : `<div style="width:26px;height:26px"></div>`;
@@ -451,7 +470,6 @@ value="${(it && it.price!=null)?it.price:cliPrice(cid, it.pid, 0)}"
 oninput="setPrice(${i}, this.value)" style="margin-bottom:0"/>
 </div>
 </div>
-${specSelectHtml}
 <div id="sub${i}" style="margin-top:8px"></div>
 ${remBtn}`;
 wrap.appendChild(card);
@@ -479,27 +497,25 @@ function moveItemDown(i) {
   renderItems();
 }
 
-function setPid(i, val) {
+function setPidSpec(i, val, specId) {
   ordItems[i].pid = val;
+  ordItems[i].specId = specId != null ? Number(specId) : null;
   const cid = Number(document.getElementById('ord-cli').value);
   const p   = S.products.find(x => x.id === Number(val));
   if (p) {
-    ensureProductSpecs(p);
-    const activeSpecs = p.specs.filter(s => s.active);
-    // Si solo hay una especificación activa, se autoselecciona; si hay
-    // varias, queda sin elegir hasta que el usuario la escoja abajo.
-    ordItems[i].specId = activeSpecs.length === 1 ? activeSpecs[0].id : null;
     const listPrice = cliPrice(cid, p.id, p.basePrice);
     // Precargar con precio de lista (no el histórico)
     ordItems[i].price = listPrice;
-  } else {
-    ordItems[i].specId = null;
   }
   renderItems();
 }
-function setSpecId(i, val) {
-  if (!ordItems[i]) return;
-  ordItems[i].specId = val ? Number(val) : null;
+// Compatibilidad: resuelve la especificación automáticamente (útil si algo
+// llama a setPid directamente sin pasar por el desplegable de producto)
+function setPid(i, val) {
+  const p = S.products.find(x => x.id === Number(val));
+  let specId = null;
+  if (p) { ensureProductSpecs(p); const active = p.specs.filter(s=>s.active); specId = active.length===1 ? active[0].id : null; }
+  setPidSpec(i, val, specId);
 }
 function setPrice(i, val) {
 if(!ordItems[i]) return;
@@ -688,6 +704,9 @@ function refreshSub(i, cid) {
 const el = document.getElementById('sub'+i); if (!el) return;
 const it = ordItems[i]; if (!it.pid) { el.innerHTML=''; return; }
 const p  = S.products.find(x => x.id===Number(it.pid)); if (!p) { el.innerHTML=''; return; }
+ensureProductSpecs(p);
+const chosenSpec = p.specs.find(s => String(s.id)===String(it.specId)) || p.specs.filter(s=>s.active)[0] || p.specs[0];
+const specLabel = chosenSpec ? chosenSpec.label : (p.presentation||'');
 const listPrice = cliPrice(cid, p.id, p.basePrice);
 const prRaw = (it && it.price!=null)? it.price : listPrice;
 // Mostrar precio de lista como referencia en el label con color
@@ -705,8 +724,6 @@ const sub  = prRaw * units;
 const ivaIncGlobal = document.getElementById('ord-iva-inc')?.checked || false;
 const prBase = ivaIncGlobal ? prRaw / 1.12 : prRaw;
 const ivaAmt = ivaIncGlobal ? (prRaw - prBase) * units : 0;
-const conv   = us>1
-? `<div style="font-size:11px;color:#64748b;margin-bottom:3px">${qty} ${p.presentation} × ${us} ${ul}s = <strong style="color:#94a3b8">${units} ${ul}s</strong> × ${Q(prRaw)}</div>` : '';
 const ivaRow = ivaIncGlobal ? `
 <div style="font-size:11px;color:#64748b;margin-top:4px;padding-top:4px;border-top:1px solid #2a3050">
 Sin IVA: <span style="color:#94a3b8">${Q(prBase)}/${ul}</span> &nbsp;·&nbsp;
@@ -715,10 +732,12 @@ IVA 12%: <span style="color:#60a5fa">${Q(ivaAmt)}</span>
 const remBtnInline = ordItems.length > 1
   ? `<button class="br" style="padding:4px 10px;font-size:12px;margin-left:8px" onclick="remItem(${i})">✕</button>` : '';
 el.innerHTML = `<div style="background:#161929;border-radius:8px;padding:8px 10px">
-${p.presentation?`<span class="tag" style="margin-bottom:4px;display:inline-block">${p.presentation}`:''}</span>
-${conv}<div style="display:flex;align-items:center;justify-content:space-between">
+<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
+${specLabel?`<span class="tag">${specLabel}</span>`:'<span></span>'}
+<div style="display:flex;align-items:center">
 <span style="color:#10b981;font-weight:700;font-size:14px">Subtotal: ${Q(sub)}</span>
 ${remBtnInline}
+</div>
 </div>
 ${ivaRow}</div>`;
 }
