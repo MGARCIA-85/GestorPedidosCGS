@@ -413,6 +413,23 @@ opts += '</optgroup>';
 });
 const remBtn = '';
 const selectedP = it.pid ? S.products.find(p=>String(p.id)===String(it.pid)) : null;
+let specSelectHtml = '';
+if (selectedP) {
+  ensureProductSpecs(selectedP);
+  const activeSpecs = selectedP.specs.filter(s => s.active);
+  if (activeSpecs.length > 1) {
+    specSelectHtml = `
+<div style="margin-top:8px">
+  <label class="lbl">Especificación</label>
+  <select class="inp" style="margin-bottom:0" onchange="setSpecId(${i}, this.value)">
+    <option value="">-- Selecciona especificación --</option>
+    ${activeSpecs.map(s=>`<option value="${s.id}" ${String(it.specId)===String(s.id)?'selected':''}>${s.label}${s.sku?' · SKU '+s.sku:''}${s.weightKg?' · '+s.weightKg+'kg':''}</option>`).join('')}
+  </select>
+</div>`;
+  } else if (activeSpecs.length === 1 && it.specId == null) {
+    it.specId = activeSpecs[0].id;
+  }
+}
 const moveUpBtn = i > 0 ? `<button type="button" onclick="moveItemUp(${i})" style="background:#2a3050;border:none;border-radius:5px;color:#94a3b8;width:26px;height:26px;font-size:13px;cursor:pointer">▲</button>` : `<div style="width:26px;height:26px"></div>`;
 const moveDownBtn = i < ordItems.length-1 ? `<button type="button" onclick="moveItemDown(${i})" style="background:#2a3050;border:none;border-radius:5px;color:#94a3b8;width:26px;height:26px;font-size:13px;cursor:pointer">▼</button>` : `<div style="width:26px;height:26px"></div>`;
 card.innerHTML = `
@@ -434,6 +451,7 @@ value="${(it && it.price!=null)?it.price:cliPrice(cid, it.pid, 0)}"
 oninput="setPrice(${i}, this.value)" style="margin-bottom:0"/>
 </div>
 </div>
+${specSelectHtml}
 <div id="sub${i}" style="margin-top:8px"></div>
 ${remBtn}`;
 wrap.appendChild(card);
@@ -466,11 +484,22 @@ function setPid(i, val) {
   const cid = Number(document.getElementById('ord-cli').value);
   const p   = S.products.find(x => x.id === Number(val));
   if (p) {
+    ensureProductSpecs(p);
+    const activeSpecs = p.specs.filter(s => s.active);
+    // Si solo hay una especificación activa, se autoselecciona; si hay
+    // varias, queda sin elegir hasta que el usuario la escoja abajo.
+    ordItems[i].specId = activeSpecs.length === 1 ? activeSpecs[0].id : null;
     const listPrice = cliPrice(cid, p.id, p.basePrice);
     // Precargar con precio de lista (no el histórico)
     ordItems[i].price = listPrice;
+  } else {
+    ordItems[i].specId = null;
   }
   renderItems();
+}
+function setSpecId(i, val) {
+  if (!ordItems[i]) return;
+  ordItems[i].specId = val ? Number(val) : null;
 }
 function setPrice(i, val) {
 if(!ordItems[i]) return;
@@ -797,6 +826,23 @@ if (editingOid === null) {
 }
 const valid = ordItems.filter(it => it.pid && Number(it.qty) > 0);
 if (!valid.length && !ordBonusLines.length) return alert('Agrega al menos un producto o una bonificación.');
+
+// Validar que los productos con más de una especificación activa tengan una elegida
+{
+  const missingSpec = valid.filter(it => {
+    const p = S.products.find(x=>x.id===Number(it.pid));
+    if (!p) return false;
+    ensureProductSpecs(p);
+    const active = p.specs.filter(s=>s.active);
+    return active.length > 1 && !active.some(s=>String(s.id)===String(it.specId));
+  });
+  if (missingSpec.length) {
+    const nombres = missingSpec.map(it => { const p=S.products.find(x=>x.id===Number(it.pid)); return p?p.name:''; }).join(', ');
+    toast('Selecciona la especificación de: '+nombres, '#f59e0b');
+    return;
+  }
+}
+
 const delivery = document.getElementById('ord-delivery')?.value.trim() || '';
 if (!delivery) return toast('El campo Entrega no puede estar vacío.', '#ef4444');
 if (document.getElementById('delivery-alert')) return toast('Confirma o cambia la dirección de entrega sugerida.', '#f59e0b');
@@ -879,6 +925,19 @@ const p = S.products.find(x => x.id===Number(it.pid));
 const defaultPrice = cliPrice(cid, Number(it.pid), p?.basePrice||0);
 const usedPrice = (it.price != null) ? Number(it.price) : defaultPrice;
 const item = { productId:Number(it.pid), qty:Number(it.qty), customPrice:usedPrice };
+// Especificación: se "congela" en el pedido la que estaba elegida/activa en
+// este momento (etiqueta, peso y SKU), para que cambios futuros al producto
+// (o a su peso) no alteren pedidos ya hechos ni sus reportes.
+if (p) {
+  ensureProductSpecs(p);
+  const chosenSpec = p.specs.find(s => String(s.id)===String(it.specId)) || p.specs.filter(s=>s.active)[0] || p.specs[0];
+  if (chosenSpec) {
+    item.specId = chosenSpec.id;
+    item.specLabel = chosenSpec.label;
+    item.specWeightKg = chosenSpec.weightKg;
+    item.specSku = chosenSpec.sku;
+  }
+}
 return item;
 });
 
@@ -1073,7 +1132,7 @@ const ord = S.orders.find(x => x.id===id); if (!ord) return;
 _isDuplicateSession = false; _duplicatingData = null; _duplicatingFrom = null;
 _listScrollY = window.scrollY;
 editingOid = id;
-ordItems   = ord.items.map(it => ({ pid:String(it.productId), qty:it.qty, price: it.customPrice != null ? it.customPrice : null, priceIncludesIva: !!it.priceIncludesIva }));
+ordItems   = ord.items.map(it => ({ pid:String(it.productId), qty:it.qty, price: it.customPrice != null ? it.customPrice : null, priceIncludesIva: !!it.priceIncludesIva, specId: it.specId != null ? it.specId : null }));
 ordBonusLines = (ord.bonusLines||[]).map(bl => ({...bl}));
 ordConditions = (ord.conditions||[]).slice();
 goTab('order');
@@ -1527,7 +1586,7 @@ function duplicateOrder(id) {
 
   // Precargar estado antes de abrir el formulario
   editingOid = null;
-  ordItems = orig.items.map(it => ({ pid:String(it.productId||it.pid), qty:it.qty, price: it.customPrice != null ? it.customPrice : null, priceIncludesIva: !!it.priceIncludesIva }));
+  ordItems = orig.items.map(it => ({ pid:String(it.productId||it.pid), qty:it.qty, price: it.customPrice != null ? it.customPrice : null, priceIncludesIva: !!it.priceIncludesIva, specId: it.specId != null ? it.specId : null }));
   ordBonusLines = orig.bonusLines ? orig.bonusLines.map(bl=>({...bl})) : [];
   _duplicatingFrom = id;
   if (orig.routeId) _cameFromRoute = true;
@@ -1809,7 +1868,7 @@ function shareOrderReportSel() {
       const p = S.products.find(x=>x.id===(it.productId||Number(it.pid)));
       const pr = (it.customPrice!=null)?it.customPrice:cliPrice(o.clientId,it.productId||it.pid,p?.basePrice||0);
       const ul = p?.unitLabel||'unidad';
-      const spec = p?.presentation ? ` (${p.presentation})` : '';
+      const spec = itemSpecLabel(it,p) ? ` (${itemSpecLabel(it,p)})` : '';
       return `》${it.qty} ${p?p.name:'—'}${spec}\nPrecio: ${Q(pr)}/${ul}${ivaText}`;
     }).join('\n');
   }
@@ -1967,7 +2026,7 @@ function generateOrderReport(selIds) {
     const p=S.products.find(x=>x.id===(it.productId||Number(it.pid)));
     const key=(p?p.name:'—');
     prodTotals[key]=(prodTotals[key]||0)+Number(it.qty);
-    if (p && p.weightKg) prodWeights[key]=(prodWeights[key]||0)+Number(it.qty)*Number(p.weightKg);
+    { const _w = it.specWeightKg != null ? it.specWeightKg : (p && p.weightKg); if (_w) prodWeights[key]=(prodWeights[key]||0)+Number(it.qty)*Number(_w); }
   }));
   const totalWeightKg = Object.values(prodWeights).reduce((s,w)=>s+w,0);
   const prodSummaryRows = Object.entries(prodTotals).sort((a,b)=>(prodWeights[b[0]]||0)-(prodWeights[a[0]]||0) || a[0].localeCompare(b[0],'es'))
@@ -2048,7 +2107,7 @@ function generateOrderReport(selIds) {
       const p = S.products.find(x=>x.id===(it.productId||Number(it.pid)));
       const pr = (it.customPrice!=null)?it.customPrice:cliPrice(o.clientId,it.productId||it.pid,p?.basePrice||0);
       const ul = p?.unitLabel||'unidad';
-      const spec = p?.presentation ? ` (${p.presentation})` : '';
+      const spec = itemSpecLabel(it,p) ? ` (${itemSpecLabel(it,p)})` : '';
       const ivaText = o.applyIva ? ' + IVA' : '';
       return '》'+it.qty+' '+(p?p.name:'—')+spec+'\nPrecio: '+Q(pr)+'/'+ul+ivaText;
     }).join('\n');
@@ -2249,7 +2308,7 @@ function generateMultiFilterReport() {
       if (!prodByMonth[key]) prodByMonth[key] = {};
       prodByMonth[key][name] = (prodByMonth[key][name]||0) + Number(it.qty);
       prodGrandTotal[name] = (prodGrandTotal[name]||0) + Number(it.qty);
-      if (p && p.weightKg) prodWeightTotal[name] = (prodWeightTotal[name]||0) + Number(it.qty)*Number(p.weightKg);
+      { const _w = it.specWeightKg != null ? it.specWeightKg : (p && p.weightKg); if (_w) prodWeightTotal[name] = (prodWeightTotal[name]||0) + Number(it.qty)*Number(_w); }
     });
   });
 
@@ -2427,7 +2486,7 @@ const ul     = p?.unitLabel||'unidad';
 const sub    = pr * it.qty * us;
 const lineDisplay = o.applyIva ? Q(sub*1.12) : Q(sub);
 const ivaLabel = o.applyIva ? ` <span style="font-size:9px;color:#facc15">+IVA</span>` : '';
-const spec = p?.presentation ? ` (${p.presentation})` : '';
+const spec = itemSpecLabel(it,p) ? ` (${itemSpecLabel(it,p)})` : '';
 const nombre = `${p?p.name:'Eliminado'}${spec}`;
 return `<div style="display:flex;justify-content:space-between;align-items:baseline;gap:4px;font-size:12px;padding:3px 0;border-bottom:1px solid #1e2640">
   <span style="color:#f1f5f9;font-weight:600;flex:1;min-width:0">${it.qty} ${nombre} × ${Q(pr)}/${ul}${ivaLabel}</span>
@@ -2886,7 +2945,7 @@ const prodLines = ord.items.map(it => {
   const pr = (it.customPrice != null) ? it.customPrice : cliPrice(ord.clientId, it.productId||it.pid, p?.basePrice||0);
   const ul = p?.unitLabel||'unidad';
   const ivaText = ord.applyIva ? ' + IVA' : '';
-  const spec = p?.presentation ? ` (${p.presentation})` : '';
+  const spec = itemSpecLabel(it,p) ? ` (${itemSpecLabel(it,p)})` : '';
   return `》${it.qty} ${p?p.name:'—'}${spec}\nPrecio: ${Q(pr)}/${ul}${ivaText}`;
 }).join('\n');
 
@@ -2968,7 +3027,7 @@ ord.items.forEach(it => {
   const p   = S.products.find(x => x.id===(it.productId||Number(it.pid)));
   const pr  = (it.customPrice != null) ? it.customPrice : cliPrice(ord.clientId, it.productId||it.pid, p?.basePrice||0);
   const ul  = p?.unitLabel||'unidad';
-  const spec = p?.presentation ? ` (${p.presentation})` : '';
+  const spec = itemSpecLabel(it,p) ? ` (${itemSpecLabel(it,p)})` : '';
   const ivaText = ord.applyIva ? ' +IVA' : '';
   t += `- ${it.qty} *${p?p.name.toUpperCase():'—'}${spec}*\n`;
   t += `  Precio ${Q(pr)}/${ul}${ivaText}\n`;

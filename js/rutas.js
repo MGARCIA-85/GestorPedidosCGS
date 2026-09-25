@@ -958,7 +958,7 @@ orders.forEach(o => {
     const p = S.products.find(x=>x.id===(it.productId||Number(it.pid)));
     const key = (p ? p.name : '—');
     prodTotals[key] = (prodTotals[key]||0) + Number(it.qty);
-    if (p && p.weightKg) prodWeights[key] = (prodWeights[key]||0) + Number(it.qty)*Number(p.weightKg);
+    { const _w = it.specWeightKg != null ? it.specWeightKg : (p && p.weightKg); if (_w) prodWeights[key] = (prodWeights[key]||0) + Number(it.qty)*Number(_w); }
   });
 });
 const totalWeightKg = Object.values(prodWeights).reduce((s,w)=>s+w,0);

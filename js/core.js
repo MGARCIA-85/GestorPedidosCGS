@@ -512,3 +512,46 @@ function confirmDel(yes) {
   window._bonusOnCancel = null;
 }
 
+
+// ── Especificaciones de producto (peso/SKU por variante) ───────────────
+// Cada producto puede tener varias "especificaciones" (antes solo tenía un
+// campo de Presentación y un Peso). Cada especificación tiene su propio
+// peso y SKU, y puede marcarse activa/inactiva. Esto migra productos
+// antiguos (que solo tenían presentation/weightKg sueltos) hacia esa
+// estructura la primera vez que se necesitan, sin perder sus datos.
+function ensureProductSpecs(p) {
+  if (!p) return [];
+  if (!p.specs || !Array.isArray(p.specs) || !p.specs.length) {
+    p.specs = [{
+      id: 1,
+      label: p.presentation || '',
+      weightKg: p.weightKg != null ? p.weightKg : null,
+      sku: '',
+      active: true
+    }];
+  }
+  return p.specs;
+}
+
+// Mantiene p.presentation / p.weightKg como espejo del producto: si hay una
+// sola especificación activa, usa esa; si hay varias, usa la primera activa.
+// Esto es solo para que las pantallas que aún muestran esos campos (listas,
+// buscadores, autocompletados de productos sin pedido asociado) sigan
+// funcionando sin cambios, mostrando un valor representativo.
+function syncProductPrimarySpec(p) {
+  if (!p) return;
+  const specs = p.specs || [];
+  const active = specs.filter(s => s.active);
+  const primary = active[0] || specs[0] || null;
+  p.presentation = primary ? (primary.label || '') : (p.presentation || '');
+  p.weightKg = primary ? primary.weightKg : (p.weightKg != null ? p.weightKg : null);
+}
+
+// Etiqueta de especificación a mostrar para una línea de pedido: usa la que
+// quedó "congelada" en el pedido al momento de venderse (it.specLabel); si
+// el pedido es de antes de que existiera esto, cae al valor actual del
+// producto (comportamiento igual al de siempre).
+function itemSpecLabel(it, p) {
+  if (it && it.specLabel) return it.specLabel;
+  return p ? (p.presentation || '') : '';
+}

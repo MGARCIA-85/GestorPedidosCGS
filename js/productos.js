@@ -138,6 +138,7 @@ ${dh}
 <div style="font-weight:700;font-size:14px;color:${p.inactive?'#94a3b8':(p.color||'#f1f5f9')}">${p.name}${p.inactive?' <span style="font-size:10px;background:#2a1f00;color:#f59e0b;border-radius:4px;padding:1px 7px;font-weight:700">🔒 BLOQUEADO</span>':''}</div>
 ${p.family ? `<span style="font-size:10px;background:#1e3a5f;color:#93c5fd;border-radius:4px;padding:1px 7px;margin-right:4px">${p.family}</span>` : ''}
 ${p.presentation ? `<span class="tag" style="display:inline-block;margin:2px 0">${p.presentation}</span>` : ''}
+${(p.specs && p.specs.filter(s=>s.active).length > 1) ? `<span style="font-size:10px;background:#1e2333;color:#a78bfa;border-radius:4px;padding:1px 7px;margin-left:4px">⚖️ ${p.specs.filter(s=>s.active).length} especificaciones</span>` : ''}
 <div style="font-size:12px;color:#64748b">Precio: <span style="color:#f59e0b;font-weight:800">${Q(p.basePrice)}</span>/${ul}</div>
 ${convLine}
 </div>
@@ -154,6 +155,9 @@ if (prodSortMode==='manual') setupDrag(body,'products');
 
 function editProd(id) {
 const p   = S.products.find(x=>x.id===id);
+ensureProductSpecs(p);
+window._editingSpecs = window._editingSpecs || {};
+window._editingSpecs[id] = p.specs.map(s => ({...s}));
 const row = document.getElementById('pr-'+id);
 row.className = 'card'; row.style.display='block';
 row.innerHTML = `
@@ -168,16 +172,15 @@ ${(S.familyList||[]).map(f=>`<option value="${f}" ${p.family===f?'selected':''}>
 <input type="checkbox" id="epfamrestricted-${id}" ${p.family && (S.restrictedFamilies||[]).includes(p.family.trim()) ? 'checked' : ''} style="width:17px;height:17px;accent-color:#f59e0b"/>
 <span style="font-size:12px;color:#f59e0b;font-weight:700">🔒 Familia restringida (requiere permiso especial del cliente)</span>
 </label>
-<label class="lbl">Especificación</label>
-<input class="inp" id="epp-${id}" value="${p.presentation||''}"/>
 <label class="lbl">Unidad de precio</label>
 <input class="inp" id="epul-${id}" value="${p.unitLabel||'unidad'}"/>
 <label class="lbl">Unidades por especificación</label>
 <input class="inp" id="epus-${id}" type="number" step="0.001" min="0.001" value="${p.unitSize||1}"/>
 <label class="lbl">Precio por unidad (Q)</label>
 <input class="inp" id="eppr-${id}" type="number" step="0.01" value="${p.basePrice}"/>
-<label class="lbl">Peso por unidad (kg) — opcional, para reportes</label>
-<input class="inp" id="epweight-${id}" type="number" step="0.001" min="0" value="${p.weightKg||''}" placeholder="Ej: 168"/>
+<label class="lbl">Especificaciones <span style="color:#64748b;font-weight:400">(peso y SKU por variante — marca cuáles están activas)</span></label>
+<div id="epspecs-${id}"></div>
+<button type="button" onclick="addProdSpecRow(${id})" style="width:100%;padding:8px;background:transparent;border:1px dashed #3b82f6;border-radius:6px;color:#60a5fa;font-size:12px;cursor:pointer;margin-bottom:12px">+ Agregar especificación</button>
 <label class="lbl">Color del producto (selector de pedidos)</label>
 <input type="hidden" id="epcolor-${id}" value="${p.color||''}"/>
 <div id="epcolor-pal-${id}" style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px"></div>
@@ -186,18 +189,69 @@ ${(S.familyList||[]).map(f=>`<option value="${f}" ${p.family===f?'selected':''}>
 <button class="bs" onclick="renderProducts()">Cancelar</button>
 </div>`;
 renderColorPalette('epcolor-pal-'+id, 'epcolor-'+id, p.color||'');
+renderProdSpecsRows(id);
+}
+
+function renderProdSpecsRows(id) {
+  const wrap = document.getElementById('epspecs-'+id);
+  if (!wrap) return;
+  const specs = (window._editingSpecs && window._editingSpecs[id]) || [];
+  wrap.innerHTML = specs.map((s,i) => `
+    <div style="display:flex;gap:6px;align-items:center;background:#161929;border:1px solid #2a3050;border-radius:8px;padding:8px;margin-bottom:6px;flex-wrap:wrap">
+      <input class="inp spec-label-${id}" data-i="${i}" placeholder="Especificación" value="${(s.label||'').replace(/"/g,'&quot;')}" style="flex:2;min-width:110px;margin:0"/>
+      <input class="inp spec-weight-${id}" data-i="${i}" type="number" step="0.001" min="0" placeholder="Peso kg" value="${s.weightKg??''}" style="flex:1;min-width:75px;margin:0"/>
+      <input class="inp spec-sku-${id}" data-i="${i}" placeholder="SKU" value="${(s.sku||'').replace(/"/g,'&quot;')}" style="flex:1;min-width:95px;margin:0"/>
+      <label style="display:flex;align-items:center;gap:4px;font-size:11px;color:${s.active?'#4ade80':'#64748b'};white-space:nowrap">
+        <input type="checkbox" class="spec-active-${id}" data-i="${i}" ${s.active?'checked':''} style="width:15px;height:15px;accent-color:#10b981"/> Activa
+      </label>
+      <button type="button" onclick="removeProdSpecRow(${id},${i})" style="background:none;border:none;color:#ef4444;font-size:16px;cursor:pointer;padding:0 4px">✕</button>
+    </div>`).join('') || '<div style="font-size:11px;color:#64748b;margin-bottom:8px">Sin especificaciones. Agrega al menos una.</div>';
+  wrap.querySelectorAll(`.spec-label-${id},.spec-weight-${id},.spec-sku-${id},.spec-active-${id}`).forEach(el => {
+    el.addEventListener('input', () => syncProdSpecsFromDOM(id));
+    el.addEventListener('change', () => syncProdSpecsFromDOM(id));
+  });
+}
+
+function syncProdSpecsFromDOM(id) {
+  const wrap = document.getElementById('epspecs-'+id);
+  if (!wrap) return;
+  const specs = window._editingSpecs[id];
+  wrap.querySelectorAll(`.spec-label-${id}`).forEach(el => { const i=Number(el.dataset.i); if(specs[i]) specs[i].label = el.value; });
+  wrap.querySelectorAll(`.spec-weight-${id}`).forEach(el => { const i=Number(el.dataset.i); if(specs[i]) specs[i].weightKg = el.value!==''?Number(el.value):null; });
+  wrap.querySelectorAll(`.spec-sku-${id}`).forEach(el => { const i=Number(el.dataset.i); if(specs[i]) specs[i].sku = el.value; });
+  wrap.querySelectorAll(`.spec-active-${id}`).forEach(el => { const i=Number(el.dataset.i); if(specs[i]) specs[i].active = el.checked; });
+}
+
+function addProdSpecRow(id) {
+  syncProdSpecsFromDOM(id);
+  const specs = window._editingSpecs[id];
+  const maxId = specs.reduce((m,s)=>Math.max(m,Number(s.id)||0),0);
+  specs.push({ id: maxId+1, label:'', weightKg:null, sku:'', active:true });
+  renderProdSpecsRows(id);
+}
+
+function removeProdSpecRow(id, idx) {
+  syncProdSpecsFromDOM(id);
+  const specs = window._editingSpecs[id];
+  if (specs.length <= 1) { toast('Debe quedar al menos una especificación','#f59e0b'); return; }
+  specs.splice(idx,1);
+  renderProdSpecsRows(id);
 }
 
 function saveProd(id) {
 const p = S.products.find(x=>x.id===id);
 p.name         = document.getElementById('epn-'+id).value.trim();
 p.family       = document.getElementById('epfam-'+id).value.trim();
-p.presentation = document.getElementById('epp-'+id).value.trim();
 p.unitLabel    = document.getElementById('epul-'+id).value.trim() || 'unidad';
 p.unitSize     = Number(document.getElementById('epus-'+id).value) || 1;
 p.basePrice    = Number(document.getElementById('eppr-'+id).value);
-const weightEl = document.getElementById('epweight-'+id);
-p.weightKg     = weightEl && weightEl.value !== '' ? Number(weightEl.value) : null;
+syncProdSpecsFromDOM(id);
+const specsIn = (window._editingSpecs[id]||[]).filter(s => (s.label||'').trim());
+if (!specsIn.length) { toast('Agrega al menos una especificación con nombre','#ef4444'); return; }
+p.specs = specsIn.map(s => ({ id:s.id, label:(s.label||'').trim(), weightKg: s.weightKg!=null&&s.weightKg!==''?Number(s.weightKg):null, sku:(s.sku||'').trim(), active: !!s.active }));
+if (!p.specs.some(s=>s.active)) p.specs[0].active = true; // no dejar el producto sin ninguna especificación seleccionable
+syncProductPrimarySpec(p);
+delete window._editingSpecs[id];
 const colorEl  = document.getElementById('epcolor-'+id);
 p.color        = colorEl ? colorEl.value : '';
 // Aplicar/quitar restricción a TODA la familia

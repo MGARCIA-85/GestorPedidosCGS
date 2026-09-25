@@ -207,7 +207,7 @@ function runGlobalSearch() {
         const ul = p.unitLabel||'unidad';
         const us = Number(p.unitSize)||1;
         const sub = pr*it.qty*us;
-        const spec = p.presentation?` (${p.presentation})`:'';
+        const spec = itemSpecLabel(it,p) ? ` (${itemSpecLabel(it,p)})` : '';
         const iva = x.applyIva?` <span style="color:#facc15;font-size:10px">+IVA</span>`:'';
         return `<div style="display:flex;justify-content:space-between;font-size:11px;padding:2px 0;border-bottom:1px solid #1e2640">
           <span style="color:#f1f5f9;font-weight:600;flex:1;min-width:0">${it.qty} ${p.name}${spec} × ${Q(pr)}/${ul}${iva}</span>
