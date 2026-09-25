@@ -488,24 +488,9 @@ function setPid(i, val) {
   }
   renderItems();
 }
-function toggleSpecDrop(i) {
-  const d = document.getElementById('spec-drop-'+i);
-  if (!d) return;
-  d.classList.toggle('open');
-}
-function closeSpecDropSoon(i) {
-  // Pequeño delay para permitir que el "mousedown" de una opción (si lo
-  // hubo) se procese antes de cerrar el desplegable
-  setTimeout(() => {
-    const d = document.getElementById('spec-drop-'+i);
-    if (d) d.classList.remove('open');
-  }, 200);
-}
-function chooseSpec(i, specId) {
+function chooseSpec(i, val) {
   if (!ordItems[i]) return;
-  ordItems[i].specId = Number(specId);
-  const d = document.getElementById('spec-drop-'+i);
-  if (d) d.classList.remove('open');
+  ordItems[i].specId = val ? Number(val) : null;
   refreshSub(i, Number(document.getElementById('ord-cli').value));
 }
 function setPrice(i, val) {
@@ -736,15 +721,13 @@ const remBtnInline = ordItems.length > 1
 const tagBaseStyle = 'font-size:12px;padding:4px 11px;font-weight:700';
 let specTagHtml;
 if (canPickSpec) {
-  const tagStyle = needsSpecChoice
-    ? `cursor:pointer;background:#2a1010;border:1px solid #ef4444;color:#ef4444;${tagBaseStyle}`
-    : `cursor:pointer;color:#f1f5f9;${tagBaseStyle}`;
-  const tagText = needsSpecChoice ? '&nbsp;&nbsp;&nbsp; ▾' : `${specLabel} ▾`;
-  const dropOpts = activeSpecs.map(s => `<div class="ac-opt" onmousedown="chooseSpec(${i},${s.id})">${s.label}${s.sku?' · SKU '+s.sku:''}${s.weightKg?' · '+s.weightKg+'kg':''}</div>`).join('');
-  specTagHtml = `<div style="position:relative;display:inline-block">
-<span class="tag" tabindex="0" onclick="toggleSpecDrop(${i})" onblur="closeSpecDropSoon(${i})" title="Toca para elegir la especificación" style="${tagStyle}">${tagText}</span>
-<div class="ac-drop" id="spec-drop-${i}" style="min-width:170px">${dropOpts}</div>
-</div>`;
+  const selStyle = needsSpecChoice
+    ? `background:#2a1010;border:1px solid #ef4444;color:#ef4444;${tagBaseStyle}`
+    : `background:#161929;border:1px solid #2a3050;color:#f1f5f9;${tagBaseStyle}`;
+  specTagHtml = `<select onchange="chooseSpec(${i}, this.value)" style="border-radius:6px;cursor:pointer;${selStyle}">
+<option value="" ${needsSpecChoice?'selected':''}>-- Elegir --</option>
+${activeSpecs.map(s=>`<option value="${s.id}" ${String(it.specId)===String(s.id)?'selected':''}>${s.label}${s.weightKg?' · '+s.weightKg+'kg':''}</option>`).join('')}
+</select>`;
 } else {
   specTagHtml = specLabel ? `<span class="tag" style="${tagBaseStyle}">${specLabel}</span>` : '<span></span>';
 }
