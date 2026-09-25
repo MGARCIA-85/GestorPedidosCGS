@@ -1649,6 +1649,23 @@ function getReportFiltered() {
       return true;
     });
   }
+
+  // Filtro por producto (el mismo criterio que usa el reporte por clientes
+  // y productos): antes solo se aplicaba al generar el reporte, no al
+  // presionar "Filtrar" sobre la lista general de pedidos.
+  if (_mfrProductIds && _mfrProductIds.length) {
+    const includeBonus  = document.getElementById('mfr-include-bonus')?.checked !== false;
+    const bonusFiltered = document.getElementById('mfr-bonus-filtered')?.checked === true;
+    filtered = filtered.filter(o => {
+      const hasProdItem = o.items.some(it => _mfrProductIds.includes(Number(it.productId||it.pid)));
+      if (hasProdItem) return true;
+      if (!includeBonus) return false;
+      const hasBonus = (o.bonusLines||[]).length > 0;
+      if (!hasBonus) return false;
+      return bonusFiltered ? (o.bonusLines||[]).some(bl => _mfrProductIds.includes(Number(bl.productId))) : true;
+    });
+  }
+
   return filtered;
 }
 
@@ -2157,11 +2174,15 @@ function mfrRenderProdChips() {
 
 function generateMultiFilterReport() {
   const clientNames = _selectedClients.slice();
-  if (!clientNames.length) { toast('Selecciona al menos un cliente', '#f59e0b'); return; }
-  const clientIds = S.clients.filter(c => clientNames.includes(c.name)).map(c => c.id);
+  const prodIds = _mfrProductIds.slice(); // vacío = todos los productos
+  if (!clientNames.length && !prodIds.length) { toast('Selecciona al menos un cliente o un producto', '#f59e0b'); return; }
+  // Sin cliente(s) marcado(s): incluir todos los clientes (menos prospectos,
+  // igual que en la lista general de pedidos), filtrando solo por producto.
+  const clientIds = clientNames.length
+    ? S.clients.filter(c => clientNames.includes(c.name)).map(c => c.id)
+    : S.clients.filter(c => !c.isProspect).map(c => c.id);
   const includeBonus = document.getElementById('mfr-include-bonus')?.checked !== false;
   const bonusFiltered = document.getElementById('mfr-bonus-filtered')?.checked === true;
-  const prodIds = _mfrProductIds.slice(); // vacío = todos los productos
 
   const fFrom = document.getElementById('f-date-from')?.value;
   const fTo   = document.getElementById('f-date-to')?.value;
