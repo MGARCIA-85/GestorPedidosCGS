@@ -413,32 +413,25 @@ opts += '</optgroup>';
 });
 const remBtn = '';
 const selectedP = it.pid ? S.products.find(p=>String(p.id)===String(it.pid)) : null;
-let activeSpecsForRow = [];
 if (selectedP) {
   ensureProductSpecs(selectedP);
-  activeSpecsForRow = selectedP.specs.filter(s => s.active);
+  const activeSpecsForRow = selectedP.specs.filter(s => s.active);
   if (activeSpecsForRow.length === 1 && it.specId == null) it.specId = activeSpecsForRow[0].id;
 }
-const needsSpecSelect = activeSpecsForRow.length > 1;
-const prodFlex = needsSpecSelect ? '1.5' : '3';
-const specColHtml = needsSpecSelect ? `
-<div style="flex:1.3"><label class="lbl">Especif.</label>
-<select class="inp" style="margin-bottom:0" onchange="setSpecId(${i}, this.value)">
-  <option value="">-- Elegir --</option>
-  ${activeSpecsForRow.map(s=>`<option value="${s.id}" ${String(it.specId)===String(s.id)?'selected':''}>${s.label}${s.weightKg?' · '+s.weightKg+'kg':''}</option>`).join('')}
-</select>
-</div>` : '';
+// Los botones de reordenar solo hacen falta si hay más de una línea; con
+// una sola no tienen nada que mover y solo desperdician espacio.
+const needsMoveBtns = ordItems.length > 1;
 const moveUpBtn = i > 0 ? `<button type="button" onclick="moveItemUp(${i})" style="background:#2a3050;border:none;border-radius:5px;color:#94a3b8;width:26px;height:26px;font-size:13px;cursor:pointer">▲</button>` : `<div style="width:26px;height:26px"></div>`;
 const moveDownBtn = i < ordItems.length-1 ? `<button type="button" onclick="moveItemDown(${i})" style="background:#2a3050;border:none;border-radius:5px;color:#94a3b8;width:26px;height:26px;font-size:13px;cursor:pointer">▼</button>` : `<div style="width:26px;height:26px"></div>`;
+const moveBtnsCol = needsMoveBtns ? `<div style="display:flex;flex-direction:column;gap:3px;flex-shrink:0">${moveUpBtn}${moveDownBtn}</div>` : '';
 card.innerHTML = `
 <div style="display:flex;gap:8px;align-items:flex-end">
-<div style="display:flex;flex-direction:column;gap:3px;flex-shrink:0">${moveUpBtn}${moveDownBtn}</div>
-<div style="flex:${prodFlex}"><label class="lbl">Producto</label>
+${moveBtnsCol}
+<div style="flex:3"><label class="lbl">Producto</label>
 <div class="ac-wrap" style="position:relative">
 <input class="inp ac-inp" id="prod-txt-${i}" autocomplete="off" placeholder="Buscar producto..." value="${it.pid ? (S.products.find(p=>String(p.id)===String(it.pid))||{name:''}).name : ''}" oninput="acProdInput(${i})" onfocus="acProdInput(${i})" onblur="acBlur('ac-prod-drop-${i}')" style="margin-bottom:0${selectedP&&selectedP.color?`;border-left:4px solid ${selectedP.color};color:${selectedP.color};font-weight:700`:''}"/>
 <div class="ac-drop" id="ac-prod-drop-${i}"></div>
 </div></div>
-${specColHtml}
 <div style="flex:1"><label class="lbl">Cantidad</label>
 <input class="inp" id="qty${i}" type="number" min="1" step="1" value="${it.qty}"
 style="margin-bottom:0" oninput="setQty(${i},this.value)"/></div>
@@ -498,6 +491,24 @@ function setPid(i, val) {
 function setSpecId(i, val) {
   if (!ordItems[i]) return;
   ordItems[i].specId = val ? Number(val) : null;
+  if (window._specEditOpen) window._specEditOpen[i] = false;
+  refreshSub(i, Number(document.getElementById('ord-cli').value));
+}
+function openSpecEdit(i) {
+  if (!window._specEditOpen) window._specEditOpen = {};
+  window._specEditOpen[i] = true;
+  refreshSub(i, Number(document.getElementById('ord-cli').value));
+  const sel = document.querySelector(`#sub${i} select.tag`);
+  if (sel) sel.focus();
+}
+function closeSpecEdit(i) {
+  // Pequeño delay para permitir que el "change" del select (si lo hubo) se
+  // procese antes de cerrar el modo edición
+  setTimeout(() => {
+    if (!window._specEditOpen || !window._specEditOpen[i]) return;
+    window._specEditOpen[i] = false;
+    refreshSub(i, Number(document.getElementById('ord-cli').value));
+  }, 150);
 }
 function setPrice(i, val) {
 if(!ordItems[i]) return;
@@ -687,8 +698,12 @@ const el = document.getElementById('sub'+i); if (!el) return;
 const it = ordItems[i]; if (!it.pid) { el.innerHTML=''; return; }
 const p  = S.products.find(x => x.id===Number(it.pid)); if (!p) { el.innerHTML=''; return; }
 ensureProductSpecs(p);
-const chosenSpec = p.specs.find(s => String(s.id)===String(it.specId)) || p.specs.filter(s=>s.active)[0] || p.specs[0];
+const activeSpecs = p.specs.filter(s=>s.active);
+const chosenSpec = p.specs.find(s => String(s.id)===String(it.specId)) || activeSpecs[0] || p.specs[0];
 const specLabel = chosenSpec ? chosenSpec.label : (p.presentation||'');
+if (!window._specEditOpen) window._specEditOpen = {};
+const canPickSpec = activeSpecs.length > 1;
+const editingSpec = canPickSpec && window._specEditOpen[i];
 const listPrice = cliPrice(cid, p.id, p.basePrice);
 const prRaw = (it && it.price!=null)? it.price : listPrice;
 // Mostrar precio de lista como referencia en el label con color
@@ -713,9 +728,18 @@ IVA 12%: <span style="color:#60a5fa">${Q(ivaAmt)}</span>
 </div>` : '';
 const remBtnInline = ordItems.length > 1
   ? `<button class="br" style="padding:4px 10px;font-size:12px;margin-left:8px" onclick="remItem(${i})">✕</button>` : '';
+// La etiqueta de especificación: si el producto tiene más de una activa,
+// es tocable y se convierte en el propio selector; si solo tiene una,
+// queda igual que siempre (informativa, sin nada que elegir).
+const specTagHtml = editingSpec
+  ? `<select class="tag" style="cursor:pointer;padding:2px 5px" onchange="setSpecId(${i}, this.value)" onblur="closeSpecEdit(${i})">
+      <option value="">-- Elegir --</option>
+      ${activeSpecs.map(s=>`<option value="${s.id}" ${String(it.specId)===String(s.id)?'selected':''}>${s.label}${s.weightKg?' · '+s.weightKg+'kg':''}</option>`).join('')}
+    </select>`
+  : (specLabel ? `<span class="tag"${canPickSpec?` onclick="openSpecEdit(${i})" style="cursor:pointer"`:''}>${specLabel}${canPickSpec?' ▾':''}</span>` : '<span></span>');
 el.innerHTML = `<div style="background:#161929;border-radius:8px;padding:8px 10px">
 <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
-${specLabel?`<span class="tag">${specLabel}</span>`:'<span></span>'}
+${specTagHtml}
 <div style="display:flex;align-items:center">
 <span style="color:#10b981;font-weight:700;font-size:14px">Subtotal: ${Q(sub)}</span>
 ${remBtnInline}
