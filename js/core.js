@@ -555,3 +555,68 @@ function itemSpecLabel(it, p) {
   if (it && it.specLabel) return it.specLabel;
   return p ? (p.presentation || '') : '';
 }
+
+// ── Modo SAP: cálculo compartido para mostrar un pedido convertido ─────
+// Un pedido marcado o.sapMode=true guarda sus datos reales intactos
+// (cantidad, precio con IVA, unidad de venta normal) — esta función NO
+// modifica nada, solo calcula, para mostrar, la cantidad y precio como se
+// deben capturar en SAP: en kilos + precio por kg sin IVA cuando el
+// producto está marcado "Se factura por kilo"; en la unidad de venta
+// normal + precio sin IVA en caso contrario. El redondeo (truncar hacia
+// abajo o normal) usa el que se guardó en el pedido al momento de
+// confirmarlo, para que el resultado no cambie si luego cambia la
+// preferencia por defecto.
+function getSapCalcForOrder(o) {
+  if (!o || !o.sapMode) return null;
+  const roundMode = o.sapRoundMode || 'floor';
+  const roundFn = (n) => roundMode === 'round' ? Math.round(n*100)/100 : Math.floor(n*100)/100;
+
+  function calcLine(p, qty, priceWithIva, weightKgPerQty) {
+    if (!p || !qty || priceWithIva == null) return null;
+    const unitSize = Number(p.unitSize) || 1;
+    const totalUnits = Number(qty) * unitSize;
+    const lineTotalWithIva = totalUnits * Number(priceWithIva);
+    let sapQty, sapUnitLabel;
+    if (p.facturaPorKilo) {
+      const w = weightKgPerQty != null ? Number(weightKgPerQty) : Number(p.weightKg || 0);
+      sapQty = Number(qty) * w;
+      sapUnitLabel = 'Kilo';
+    } else {
+      sapQty = totalUnits;
+      sapUnitLabel = p.unitLabel || 'unidad';
+    }
+    if (!sapQty) return null;
+    const sapPriceWithIva = lineTotalWithIva / sapQty;
+    const sapPriceNoIva = roundFn(sapPriceWithIva / 1.12);
+    const sapLineTotalWithIva = sapQty * sapPriceNoIva * 1.12;
+    const sapLineTotalNoIva = sapQty * sapPriceNoIva;
+    return { sapQty, sapUnitLabel, sapPriceNoIva, sapLineTotalWithIva, sapLineTotalNoIva };
+  }
+
+  const items = (o.items||[]).map(it => {
+    const p = S.products.find(x=>x.id===Number(it.productId));
+    if (!p) return null;
+    ensureProductSpecs(p);
+    const spec = p.specs.find(s=>String(s.id)===String(it.specId));
+    const r = calcLine(p, it.qty, it.customPrice, spec?spec.weightKg:null);
+    if (!r) return null;
+    return { ...r, productId: p.id, name: p.name, specLabel: spec?spec.label:(it.specLabel||''), qty: it.qty };
+  }).filter(Boolean);
+
+  const bonusLines = (o.bonusLines||[]).map(bl => {
+    const p = S.products.find(x=>x.id===Number(bl.productId));
+    if (!p) return null;
+    ensureProductSpecs(p);
+    const activeSpecs = p.specs.filter(s=>s.active);
+    const spec = p.specs.find(s=>String(s.id)===String(bl.specId)) || (activeSpecs.length<=1 ? (activeSpecs[0]||p.specs[0]) : null);
+    const r = calcLine(p, bl.qty, bl.price, spec?spec.weightKg:null);
+    if (!r) return null;
+    return { ...r, productId: p.id, name: p.name, specLabel: spec?spec.label:'', qty: bl.qty, ruleName: bl.ruleName, exceptional: bl.exceptional };
+  }).filter(Boolean);
+
+  const subtotalSinIva = items.reduce((s,x)=>s+x.sapLineTotalNoIva,0);
+  const ivaMonto        = items.reduce((s,x)=>s+(x.sapLineTotalWithIva - x.sapLineTotalNoIva),0);
+  const totalConIva     = subtotalSinIva + ivaMonto;
+
+  return { items, bonusLines, subtotalSinIva, ivaMonto, totalConIva };
+}

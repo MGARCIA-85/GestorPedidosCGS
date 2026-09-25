@@ -812,9 +812,16 @@ ${(()=>{
   const rows_map = {};
   cliOrds.forEach(o=>{
     const tot = orderTotal(o.items,o.clientId);
-    const disp = o.applyIva?tot*1.12:tot;
+    const sapCalc = o.sapMode ? getSapCalcForOrder(o) : null;
+    const disp = sapCalc ? sapCalc.totalConIva : (o.applyIva?tot*1.12:tot);
     const sCls = o.cancelled?'#ef4444':isOrderBlocked(o)?'#a855f7':o.status==='Concluido'?'#4ade80':o.status==='Confirmado'?'#60a5fa':'#f1f5f9';
-    const itemsHtml = o.items.map(it=>{
+    const itemsHtml = sapCalc ? sapCalc.items.map(r=>{
+      const spec = r.specLabel ? ` (${r.specLabel})` : '';
+      return `<div style="display:flex;justify-content:space-between;align-items:baseline;gap:4px;font-size:11px;padding:3px 0;border-bottom:1px solid #1e2640">
+        <span style="color:#f1f5f9;font-weight:600;flex:1;min-width:0">${r.qty} ${r.name}${spec} × ${Q(r.sapPriceNoIva)}/${r.sapUnitLabel} <span style="color:#facc15;font-size:10px">+IVA</span></span>
+        <span style="color:#f1f5f9;font-weight:700;flex-shrink:0">${Q(r.sapLineTotalWithIva)}</span>
+      </div>`;
+    }).join('') : o.items.map(it=>{
       const p = S.products.find(x=>x.id===it.productId);
       if (!p) return '';
       const pr = (it.customPrice!=null)?it.customPrice:cliPrice(o.clientId,it.productId,p.basePrice||0);
@@ -851,11 +858,14 @@ ${(()=>{
       ${o.delivery?`<div style="font-size:11px;color:#3b82f6;font-weight:600;margin-bottom:3px">📍 ${o.delivery}</div>`:''}
       ${o.quoteNote?`<div style="font-size:11px;color:#38bdf8;font-weight:700;margin-bottom:4px">📅 Fecha de entrega: ${fmtEntrega(o.quoteNote)}</div>`:''}
       <div style="background:#0d0f18;border-radius:5px;padding:4px 6px;margin-bottom:4px">${itemsHtml}</div>
-      <div style="font-size:13px;font-weight:700;color:#f1f5f9;margin-bottom:4px">TOTAL ${Q(disp)}</div>
+      <div style="font-size:13px;font-weight:700;color:#f1f5f9;margin-bottom:4px">TOTAL ${Q(disp)}${sapCalc?' <span style="font-size:9px;font-weight:700;color:#fff;background:#7c3aed;padding:1px 6px;border-radius:4px;margin-left:4px">🧮 SAP</span>':''}</div>
       ${(o.comments&&o.comments.length)?o.comments.filter(Boolean).map(cm=>`<div style="font-size:11px;color:#f97316;font-style:italic;margin-bottom:3px">💬 ${cm}</div>`).join(''):''}
       ${(()=>{
         if (!o.bonusLines||!o.bonusLines.length) return '';
-        const bLines = o.bonusLines.map(bl=>{
+        const bLines = sapCalc ? sapCalc.bonusLines.map(r=>{
+          const spec = r.specLabel?` (${r.specLabel})`:'';
+          return `<div style="font-size:11px;color:#f1f5f9;font-weight:600;padding:2px 0;border-bottom:1px solid #1e2640">${r.qty} ${r.name}${spec} × ${Q(r.sapPriceNoIva)}/${r.sapUnitLabel} <span style="font-size:9px;color:#facc15">+IVA</span></div>`;
+        }).join('') : o.bonusLines.map(bl=>{
           const p = S.products.find(x=>x.id===Number(bl.productId));
           const spec = p?.presentation?` (${p.presentation})`:'';
           const ul = p?.unitLabel||'unidad';

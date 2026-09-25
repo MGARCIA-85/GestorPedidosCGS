@@ -326,16 +326,32 @@ function renderOrdBonusRows() {
   if (!section || !wrap) return;
   if (!ordBonusLines.length) { section.style.display='none'; return; }
   section.style.display = 'block';
-  const prodOpts = S.products.map(p=>`<option value="${p.id}">${p.name}${p.presentation ? ' ('+p.presentation+')' : ''}</option>`).join('');
   wrap.innerHTML = ordBonusLines.map((bl,i) => {
     const pOpts = S.products.map(p=>`<option value="${p.id}" ${p.id===Number(bl.productId)?'selected':''}>${p.name}${p.presentation ? ' ('+p.presentation+')' : ''}</option>`).join('');
+    const blP = S.products.find(p=>p.id===Number(bl.productId));
+    let specRow = '';
+    if (blP) {
+      ensureProductSpecs(blP);
+      const activeSpecs = blP.specs.filter(s=>s.active);
+      if (activeSpecs.length > 1) {
+        if (bl.specId == null || !activeSpecs.some(s=>String(s.id)===String(bl.specId))) bl.specId = null;
+        const needsChoice = bl.specId == null;
+        specRow = `<select onchange="ordBonusLines[${i}].specId=this.value?Number(this.value):null;window._bonusConfirmed=true;renderSapCalc()" style="width:100%;background:${needsChoice?'#2a1010':'#0d0f18'};color:${needsChoice?'#ef4444':'#f1f5f9'};border:1px solid ${needsChoice?'#ef4444':'#2a3050'};border-radius:6px;padding:4px 8px;font-size:11px;margin-bottom:4px">
+          <option value="">-- Elegir especificación --</option>
+          ${activeSpecs.map(s=>`<option value="${s.id}" ${String(bl.specId)===String(s.id)?'selected':''}>${s.label}${s.weightKg?' · '+s.weightKg+'kg':''}</option>`).join('')}
+        </select>`;
+      } else if (activeSpecs.length === 1) {
+        bl.specId = activeSpecs[0].id;
+      }
+    }
     return `<div style="background:#0d0f18;padding:6px;border-radius:7px;margin-bottom:5px">
       <div style="display:grid;grid-template-columns:1fr 45px 65px 28px;gap:4px;align-items:center;margin-bottom:4px">
-        <select onchange="ordBonusLines[${i}].productId=Number(this.value);window._bonusConfirmed=true;refreshTotal(Number(document.getElementById('ord-cli').value))" style="background:#0d0f18;color:#f1f5f9;border:1px solid #2a3050;border-radius:6px;padding:4px;font-size:11px;min-width:0">${pOpts}</select>
+        <select onchange="ordBonusLines[${i}].productId=Number(this.value);ordBonusLines[${i}].specId=null;window._bonusConfirmed=true;renderOrdBonusRows();refreshTotal(Number(document.getElementById('ord-cli').value))" style="background:#0d0f18;color:#f1f5f9;border:1px solid #2a3050;border-radius:6px;padding:4px;font-size:11px;min-width:0">${pOpts}</select>
         <input type="number" value="${bl.qty||1}" min="1" onchange="ordBonusLines[${i}].qty=Number(this.value);window._bonusConfirmed=true;refreshTotal(Number(document.getElementById('ord-cli').value))" style="background:#0d0f18;color:#f1f5f9;border:1px solid #2a3050;border-radius:6px;padding:4px;font-size:11px;width:100%"/>
         <input type="number" value="${bl.price||0}" min="0" step="0.01" onchange="ordBonusLines[${i}].price=Number(this.value);window._bonusConfirmed=true;refreshTotal(Number(document.getElementById('ord-cli').value))" style="background:#0d0f18;color:#f1f5f9;border:1px solid #2a3050;border-radius:6px;padding:4px;font-size:11px;width:100%"/>
         <button onclick="ordBonusLines.splice(${i},1);window._bonusConfirmed=true;renderOrdBonusRows();refreshTotal(Number(document.getElementById('ord-cli').value))" style="background:#ef444420;border:1px solid #ef4444;border-radius:5px;color:#ef4444;padding:2px 4px;font-size:11px;cursor:pointer">✕</button>
       </div>
+      ${specRow}
       <input value="${bl.ruleName&&bl.ruleName!=='Manual'?bl.ruleName:''}" placeholder="Comentario (ej: Por consumo Trim. Q2)" onchange="ordBonusLines[${i}].ruleName=this.value||'Manual'" style="width:100%;background:#0d0f18;color:#f1f5f9;border:1px solid #2a3050;border-radius:6px;padding:4px 8px;font-size:11px;margin-bottom:4px"/>
       <label style="display:flex;align-items:center;gap:6px;font-size:11px;color:${bl.exceptional?'#f59e0b':'#64748b'};cursor:pointer">
         <input type="checkbox" ${bl.exceptional?'checked':''} onchange="ordBonusLines[${i}].exceptional=this.checked;window._bonusConfirmed=true;renderOrdBonusRows()" style="width:14px;height:14px;accent-color:#f59e0b"/>
@@ -367,7 +383,7 @@ function addOrdBonusRow() {
     pr  = cliPrice(cid, pid, firstProd?.basePrice || 0);
   }
 
-  ordBonusLines.push({ productId: pid, qty:1, price:pr, ruleName:'Manual' });
+  ordBonusLines.push({ productId: pid, qty:1, price:pr, specId:null, ruleName:'Manual' });
   window._bonusConfirmed = true;
   renderOrdBonusRows();
   refreshTotal(cid);
@@ -763,6 +779,7 @@ renderSapCalc();
 // que siempre.
 function resetSapCalcUI() {
   window._sapCalcOpen = false;
+  window._sapConfirmed = false;
   const panel = document.getElementById('ord-sap-panel');
   const roundRow = document.getElementById('ord-sap-round-row');
   const btn = document.getElementById('btn-sap-calc');
@@ -835,9 +852,8 @@ function renderSapCalc() {
     const p = S.products.find(x => x.id === Number(bl.productId));
     if (!p) return;
     ensureProductSpecs(p);
-    // Las bonificaciones no guardan cuál especificación se usó; se toma la
-    // primera especificación activa como referencia de peso.
-    const chosenSpec = p.specs.filter(s=>s.active)[0] || p.specs[0];
+    const activeSpecs = p.specs.filter(s=>s.active);
+    const chosenSpec = p.specs.find(s=>String(s.id)===String(bl.specId)) || (activeSpecs.length<=1 ? (activeSpecs[0]||p.specs[0]) : null);
     const priceWithIva = Number(bl.price) || 0;
     const r = calcLine(p, bl.qty, priceWithIva, chosenSpec ? chosenSpec.weightKg : null);
     if (!r) return;
@@ -965,6 +981,18 @@ if (!valid.length && !ordBonusLines.length) return alert('Agrega al menos un pro
     toast('Selecciona la especificación de: '+nombres, '#f59e0b');
     return;
   }
+  const missingBonusSpec = (ordBonusLines||[]).filter(bl => {
+    const p = S.products.find(x=>x.id===Number(bl.productId));
+    if (!p) return false;
+    ensureProductSpecs(p);
+    const active = p.specs.filter(s=>s.active);
+    return active.length > 1 && !active.some(s=>String(s.id)===String(bl.specId));
+  });
+  if (missingBonusSpec.length) {
+    const nombres = missingBonusSpec.map(bl => { const p=S.products.find(x=>x.id===Number(bl.productId)); return p?p.name:''; }).join(', ');
+    toast('Selecciona la especificación de la bonificación: '+nombres, '#f59e0b');
+    return;
+  }
 }
 
 const delivery = document.getElementById('ord-delivery')?.value.trim() || '';
@@ -1035,6 +1063,30 @@ if (_duplicatingFrom && ordBonusLines.length > 0 && !window._bonusConfirmed) {
   return;
 }
 window._bonusConfirmed = false;
+
+// Confirmación al guardar en modo SAP: afecta solo cómo se van a MOSTRAR
+// las tarjetas/cotización/reportes de este pedido (cantidades en kilos
+// donde aplique, precios sin IVA truncados). Los datos reales que
+// ingresaste no se tocan, y se puede desactivar después editando el pedido.
+// No aplica al botón "Cotizar" (vista previa), solo a Registrar/Guardar.
+if (!isQuote && window._sapCalcOpen && !window._sapConfirmed) {
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
+  overlay.innerHTML = `<div style="background:#1e2236;border:1px solid #7c3aed;border-radius:14px;padding:20px;max-width:360px;width:100%">
+    <div style="font-size:15px;font-weight:800;color:#a78bfa;margin-bottom:8px">🧮 Guardar en modo SAP</div>
+    <div style="font-size:12px;color:#94a3b8;margin-bottom:10px">Las tarjetas, la cotización y los reportes de este pedido van a mostrar las cantidades y precios convertidos para SAP (kilos donde el producto lo requiera, precio sin IVA truncado a 2 decimales) en vez de lo que ingresaste. Los datos reales del pedido no cambian, y puedes desactivarlo después editando el pedido con el botón "Calcular para SAP" apagado.</div>
+    <div style="display:flex;flex-direction:column;gap:8px;margin-top:16px">
+      <button onclick="this.closest('div[style*=fixed]').remove();window._sapConfirmed=true;submitOrder(${isQuote})"
+        style="padding:10px;background:#7c3aed;border:none;border-radius:8px;color:#fff;font-weight:700;font-size:14px;cursor:pointer">✅ Sí, guardar en modo SAP</button>
+      <button onclick="this.closest('div[style*=fixed]').remove()"
+        style="padding:10px;background:#2a3050;border:none;border-radius:8px;color:#94a3b8;font-weight:700;font-size:14px;cursor:pointer">Cancelar</button>
+    </div>
+  </div>`;
+  document.body.appendChild(overlay);
+  return;
+}
+window._sapConfirmed = false;
+
 const cli  = S.clients.find(c => c.id===cid);
 const comments = getComments();
 const note = comments.join(' | ');  // backward compat field
@@ -1042,8 +1094,14 @@ const quote = document.getElementById('ord-quote')?.value.trim() || '';
 const quoteNote = document.getElementById('ord-quote-note')?.value.trim() || '';
 const oc = document.getElementById('ord-oc')?.value.trim() || '';
 const contact = document.getElementById('ord-contact')?.value.trim() || '';
-const applyIva       = document.getElementById('ord-iva')?.checked || false;
-const pricesIncIva   = document.getElementById('ord-iva-inc')?.checked || false;
+const applyIvaRaw     = document.getElementById('ord-iva')?.checked || false;
+const pricesIncIvaRaw = document.getElementById('ord-iva-inc')?.checked || false;
+// En modo SAP el precio que se ingresa siempre incluye IVA (así es como se
+// cotiza al cliente), sin importar cómo estuvieran estos 2 interruptores.
+// No aplica a la vista previa de "Cotizar", solo a Registrar/Guardar.
+const sapModeOn    = !isQuote && !!window._sapCalcOpen;
+const applyIva     = sapModeOn ? false : applyIvaRaw;
+const pricesIncIva = sapModeOn ? true  : pricesIncIvaRaw;
 const items = valid.map(it => {
 const p = S.products.find(x => x.id===Number(it.pid));
 const defaultPrice = cliPrice(cid, Number(it.pid), p?.basePrice||0);
@@ -1098,6 +1156,11 @@ ord.oc           = oc;
 ord.delivery     = delivery;
 ord.applyIva     = applyIva;
 ord.pricesIncIva = pricesIncIva;
+// Modo SAP: sapMode=true si se guardó con el botón activo (y confirmado);
+// false si se guardó con el botón apagado — así queda reversible: basta
+// con editar el pedido sin el botón activo para "desactivarlo".
+ord.sapMode       = sapModeOn;
+ord.sapRoundMode  = sapModeOn ? (window._sapRoundMode || 'floor') : undefined;
 ord.editedAt     = nowDateTimeStr();
 }
 save(); toast('💾 Pedido actualizado');
@@ -1162,6 +1225,7 @@ const newOrd = {
   note, comments, quote, quoteNote, oc, delivery, applyIva, pricesIncIva, items, contact,
   conditions: ordConditions.filter(c=>c&&c.trim()),
   bonusLines: ordBonusLines.length ? ordBonusLines.map(bl=>({...bl})) : undefined,
+  sapMode: sapModeOn, sapRoundMode: sapModeOn ? (window._sapRoundMode || 'floor') : undefined,
   date:(()=>{
     const fd = document.getElementById('ord-date')?.value;
     if (fd) {
@@ -1219,6 +1283,7 @@ function finishSave() {
     save(); toast('✅ Pedido registrado');
   }
   editingOid = null;
+  resetSapCalcUI();
   document.getElementById('ord-quote').value='';
   document.getElementById('ord-oc').value='';
   const contactClearEl = document.getElementById('ord-contact'); if (contactClearEl) contactClearEl.value='';
@@ -2141,7 +2206,14 @@ function generateOrderReport(selIds) {
   const defaultTitle = fCli ? `Informe: ${fCli}` : 'Informe de Pedidos';
   const title = prompt('Título del informe (también será el nombre del archivo):', defaultTitle) || defaultTitle;
   const periodo = (fFrom||fTo) ? `${fFrom||'inicio'} → ${fTo||'hoy'}` : fmtOrdDate((()=>{ const n=new Date(); return `${String(n.getDate()).padStart(2,'0')}/${String(n.getMonth()+1).padStart(2,'0')}/${n.getFullYear()}`; })());
-  const tot = filtered.reduce((s,o)=>{const t=orderTotal(o.items,o.clientId);return s+(o.applyIva?t*1.12:t);},0);
+  // Total con IVA a mostrar por pedido: si está en modo SAP, usa el total
+  // convertido (kg + precio sin IVA truncado); si no, el total normal.
+  function _ordDispTotal(o) {
+    if (o.sapMode) { const sc = getSapCalcForOrder(o); return sc ? sc.totalConIva : 0; }
+    const t = orderTotal(o.items, o.clientId);
+    return o.applyIva ? t*1.12 : t;
+  }
+  const tot = filtered.reduce((s,o)=>s+_ordDispTotal(o),0);
 
   // Resumen de productos
   const prodTotals = {};
@@ -2162,9 +2234,12 @@ function generateOrderReport(selIds) {
 
   // Filas de pedidos
   const rows = filtered.map((o,i)=>{
-    const oTot = orderTotal(o.items,o.clientId);
-    const oDisp = o.applyIva?oTot*1.12:oTot;
-    const prods = o.items.map(it=>{
+    const oDisp = _ordDispTotal(o);
+    const sapCalc = o.sapMode ? getSapCalcForOrder(o) : null;
+    const prods = sapCalc ? sapCalc.items.map(r=>`<tr><td style="padding:5px 8px;font-size:12px">${r.name}${r.specLabel?` <span style="color:#374151">(${r.specLabel})</span>`:''}</td>
+        <td style="padding:5px 8px;text-align:center;font-size:12px">${r.qty}</td>
+        <td style="padding:5px 8px;text-align:right;font-size:12px">${Q(r.sapPriceNoIva)}/${r.sapUnitLabel} <span style="color:#2563eb;font-size:10px">+IVA</span></td>
+        <td style="padding:5px 8px;text-align:right;font-weight:700;font-size:12px">${Q(r.sapLineTotalWithIva)}</td></tr>`).join('') : o.items.map(it=>{
       const p=S.products.find(x=>x.id===(it.productId||Number(it.pid)));
       const pr=(it.customPrice!=null)?it.customPrice:cliPrice(o.clientId,it.productId||it.pid,p?.basePrice||0);
       const ul=p?.unitLabel||'unidad';
@@ -2174,7 +2249,10 @@ function generateOrderReport(selIds) {
         <td style="padding:5px 8px;text-align:right;font-size:12px">${Q(pr)}/${ul}${_ivaTag1}</td>
         <td style="padding:5px 8px;text-align:right;font-weight:700;font-size:12px">${Q(pr*it.qty*(Number(p?.unitSize)||1))}</td></tr>`;
     }).join('');
-    const bonusRowsHtml = (o.bonusLines||[]).map(bl=>{
+    const bonusRowsHtml = sapCalc ? sapCalc.bonusLines.map(r=>`<tr style="background:#f0fdf4"><td style="padding:4px 8px;color:#15803d"><span style="font-size:11px;font-weight:700">${r.name}${r.specLabel?' ('+r.specLabel+')':''}</span>${r.ruleName&&r.ruleName!=='Manual'?`<br><span style="font-size:10px;color:#6b7280">${r.ruleName}</span>`:''}</td>
+        <td style="padding:4px 8px;text-align:center;color:#15803d">${r.qty}</td>
+        <td style="padding:4px 8px;text-align:right;color:#15803d">${Q(r.sapPriceNoIva)}/${r.sapUnitLabel} <span style="font-size:10px">+IVA</span></td>
+        <td style="padding:4px 8px;text-align:right;font-weight:700;color:#15803d">${Q(r.sapLineTotalWithIva)}</td></tr>`).join('') : (o.bonusLines||[]).map(bl=>{
       const p=S.products.find(x=>x.id===Number(bl.productId));
       const ul=p?.unitLabel||'unidad';
       const sub=(bl.price||0)*bl.qty*(Number(p?.unitSize)||1);
@@ -2221,13 +2299,16 @@ function generateOrderReport(selIds) {
   const logoHtml = b.logoData ? `<img src="${b.logoData}" style="width:50px;height:50px;border-radius:8px;object-fit:cover"/>` : `<div style="font-size:28px">${b.emoji||'📦'}</div>`;
   // Generar texto del correo (debe ir antes del template html)
   const mailLines = filtered.map((o, i) => {
-    const oTot = orderTotal(o.items, o.clientId);
-    const oDisp = o.applyIva ? oTot*1.12 : oTot;
+    const oDisp = _ordDispTotal(o);
+    const sapCalc2 = o.sapMode ? getSapCalcForOrder(o) : null;
     const cmts = (o.comments&&o.comments.length?o.comments:(o.note?[o.note]:[])).filter(c=>c&&c.trim());
     const cotLine = o.quote ? `Cot: ${o.quote}` : '';
     const ocLine  = o.oc    ? `Orden ${o.oc}` : '';
     const cmtLines = cmts.map(c => `•${c}`).join('\n');
-    const prodLines = o.items.map(it => {
+    const prodLines = sapCalc2 ? sapCalc2.items.map(r => {
+      const spec = r.specLabel ? ` (${r.specLabel})` : '';
+      return '》'+r.qty+' '+r.name+spec+'\nPrecio: '+Q(r.sapPriceNoIva)+'/'+r.sapUnitLabel+' + IVA';
+    }).join('\n') : o.items.map(it => {
       const p = S.products.find(x=>x.id===(it.productId||Number(it.pid)));
       const pr = (it.customPrice!=null)?it.customPrice:cliPrice(o.clientId,it.productId||it.pid,p?.basePrice||0);
       const ul = p?.unitLabel||'unidad';
@@ -2235,7 +2316,10 @@ function generateOrderReport(selIds) {
       const ivaText = o.applyIva ? ' + IVA' : '';
       return '》'+it.qty+' '+(p?p.name:'—')+spec+'\nPrecio: '+Q(pr)+'/'+ul+ivaText;
     }).join('\n');
-    const bonusLines = (o.bonusLines||[]).map(bl => {
+    const bonusLines = sapCalc2 ? sapCalc2.bonusLines.map(r => {
+      const spec = r.specLabel ? ` (${r.specLabel})` : '';
+      return r.qty+' '+r.name+spec+'\nPrecio: '+Q(r.sapPriceNoIva)+'/'+r.sapUnitLabel+' + IVA';
+    }).join('\n') : (o.bonusLines||[]).map(bl => {
       const p = S.products.find(x=>x.id===Number(bl.productId));
       const ul = p?.unitLabel||'unidad';
       const spec = p?.presentation ? ' ('+p.presentation+')' : '';
@@ -2251,8 +2335,8 @@ function generateOrderReport(selIds) {
   const mailBody = 'Buen día, por favor facturar:\n\n' + mailLines;
   const mailSubject = title;
 
-  const tPend = filtered.filter(o=>o.status==='Confirmado').reduce((s,o)=>{const bv=orderTotal(o.items,o.clientId);return s+(o.applyIva?bv*1.12:bv);},0);
-  const tFact = filtered.filter(o=>o.status==='Concluido').reduce((s,o)=>{const bv=orderTotal(o.items,o.clientId);return s+(o.applyIva?bv*1.12:bv);},0);
+  const tPend = filtered.filter(o=>o.status==='Confirmado').reduce((s,o)=>s+_ordDispTotal(o),0);
+  const tFact = filtered.filter(o=>o.status==='Concluido').reduce((s,o)=>s+_ordDispTotal(o),0);
 
   const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${title}</title>
   <style>*{box-sizing:border-box}body{font-family:Arial,sans-serif;margin:0;padding:14px;color:#111;font-size:17px}
@@ -2602,7 +2686,14 @@ if (!filtered.length) { body.innerHTML='<div style="text-align:center;color:#647
 body.innerHTML = '';
 filtered.forEach(o => {
 const tot   = orderTotal(o.items, o.clientId);
-const lines = o.items.map(it => {
+const sapCalc = o.sapMode ? getSapCalcForOrder(o) : null;
+const lines = sapCalc ? sapCalc.items.map(r => {
+const nombre = `${r.name}${r.specLabel?` (${r.specLabel})`:''}`;
+return `<div style="display:flex;justify-content:space-between;align-items:baseline;gap:4px;font-size:12px;padding:3px 0;border-bottom:1px solid #1e2640">
+  <span style="color:#f1f5f9;font-weight:600;flex:1;min-width:0">${r.qty} ${nombre} × ${Q(r.sapPriceNoIva)}/${r.sapUnitLabel} <span style="font-size:9px;color:#facc15">+IVA</span></span>
+  <span style="color:#f1f5f9;font-weight:700;flex-shrink:0">${Q(r.sapLineTotalWithIva)}</span>
+</div>`;
+}).join('') : o.items.map(it => {
 const p      = S.products.find(x => x.id===it.productId);
 const pr     = (it.customPrice != null) ? it.customPrice : cliPrice(o.clientId, it.productId, p?.basePrice||0);
 const us     = Number(p?.unitSize)||1;
@@ -2655,17 +2746,22 @@ return cmts.map(c=>`<div style="font-size:11px;color:#f97316;margin-top:4px">�
 })()}
 <div style="margin-top:8px">
 ${(()=>{
+if(sapCalc) return '<div style=\"font-size:11px;color:#64748b;margin-bottom:2px\">Sin IVA: '+Q(sapCalc.subtotalSinIva)+' &nbsp;+&nbsp; IVA 12%: '+Q(sapCalc.ivaMonto)+'</div>';
 if(o.pricesIncIva) return '<div style=\"font-size:11px;color:#64748b;margin-bottom:2px\">Sin IVA: '+Q(tot/1.12)+' &nbsp;+&nbsp; IVA 12%: '+Q(tot-tot/1.12)+'</div>';
 if(o.applyIva)    return '<div style=\"font-size:11px;color:#64748b;margin-bottom:2px\">Subtotal: '+Q(tot)+' &nbsp;+&nbsp; IVA 12%: '+Q(tot*0.12)+'</div>';
 return '';
 })()}
-<div style="font-weight:800;font-size:15px;color:#f1f5f9;display:flex;align-items:center;gap:6px;flex-wrap:wrap">TOTAL ${Q(o.pricesIncIva ? tot : o.applyIva ? tot*1.12 : tot)}
-${(o.pricesIncIva||o.applyIva) ? '<span style=\"font-size:10px;font-weight:600;color:#facc15;background:#1e3a5f;padding:1px 6px;border-radius:4px\">IVA incl.</span>' : ''}
+<div style="font-weight:800;font-size:15px;color:#f1f5f9;display:flex;align-items:center;gap:6px;flex-wrap:wrap">TOTAL ${Q(sapCalc ? sapCalc.totalConIva : (o.pricesIncIva ? tot : o.applyIva ? tot*1.12 : tot))}
+${(sapCalc||o.pricesIncIva||o.applyIva) ? '<span style=\"font-size:10px;font-weight:600;color:#facc15;background:#1e3a5f;padding:1px 6px;border-radius:4px\">IVA incl.</span>' : ''}
+${sapCalc ? '<span style=\"font-size:10px;font-weight:700;color:#fff;background:#7c3aed;padding:1px 7px;border-radius:4px\">🧮 SAP</span>' : ''}
 <span class="${sCls}" style="margin-left:auto">${o.status}</span></div>
 </div>
 ${(()=>{
 if (!o.bonusLines||!o.bonusLines.length) return '';
-const bLines = o.bonusLines.map(bl=>{
+const bLines = sapCalc ? sapCalc.bonusLines.map(r=>{
+  const spec = r.specLabel?` (${r.specLabel})`:'';
+  return `<div style="display:flex;justify-content:space-between;font-size:11px;padding:2px 0;border-bottom:1px solid #1e2640"><span style="color:#f1f5f9;font-weight:600">${r.qty} ${r.name}${spec} × ${Q(r.sapPriceNoIva)}/${r.sapUnitLabel} <span style="font-size:9px;color:#facc15">+IVA</span></span></div>`;
+}).join('') : o.bonusLines.map(bl=>{
   const p = S.products.find(x=>x.id===Number(bl.productId));
   const spec = p?.presentation?` (${p.presentation})`:'';
   const ul = p?.unitLabel||'unidad';
@@ -2891,6 +2987,7 @@ function buildQuoteHTML(ord) {
 const b    = S.biz;
 const cli  = S.clients.find(c => c.id===ord.clientId);
 const tot  = orderTotal(ord.items, ord.clientId);
+const sapCalc = ord.sapMode ? getSapCalcForOrder(ord) : null;
 const qNum = ord.quote || 'COT-'+String(ord.id||Date.now()).toString().slice(-6).padStart(6,'0');
 const logoHtml = b.logoData
 ? `<img src="${b.logoData}" style="width:240px;height:120px;border-radius:10px;object-fit:contain"/>`
@@ -2906,7 +3003,12 @@ const cliInfo = [
 cli?.phone   ? '📞 '+cli.phone   : '',
 cli?.address ? '📍 '+cli.address : '',
 ].filter(Boolean).join(' · ');
-const rows = ord.items.map(it => {
+const rows = sapCalc ? sapCalc.items.map(r => `<tr>
+<td style="padding:7px 6px">${r.name}${r.specLabel?` <span style="color:#374151">(${r.specLabel})</span>`:''}</td>
+<td style="padding:7px 6px;text-align:center">${r.qty}</td>
+<td style="padding:7px 6px;text-align:right">${Q(r.sapPriceNoIva)}/${r.sapUnitLabel}<div style="font-size:9px;color:#2563eb;font-weight:600;margin-top:2px">+IVA</div></td>
+<td style="padding:7px 6px;text-align:right;font-weight:700">${Q(r.sapLineTotalWithIva)}</td>
+</tr>`).join('') : ord.items.map(it => {
 const p     = S.products.find(x => x.id===(it.productId||Number(it.pid)));
 const pr    = (it.customPrice != null) ? it.customPrice : cliPrice(ord.clientId, it.productId||it.pid, p?.basePrice||0);
 const us    = Number(p?.unitSize)||1;
@@ -2924,7 +3026,15 @@ return `<tr>
 }).join('');
 
 // Líneas de bonificación
-const bonusRows = (ord.bonusLines||[]).map(bl => {
+const bonusRows = sapCalc ? sapCalc.bonusLines.map(r => `<tr style="background:#f0fdf4">
+<td style="padding:7px 6px;color:#15803d">
+  <div style="font-size:10px;color:#15803d">${r.name}${r.specLabel?' ('+r.specLabel+')':''}</div>
+  ${r.ruleName&&r.ruleName!=='Manual'?`<div style="font-size:10px;color:#6b7280">${r.ruleName}</div>`:''}
+</td>
+<td style="padding:7px 6px;text-align:center;color:#15803d">${r.qty}</td>
+<td style="padding:7px 6px;text-align:right;color:#15803d">${Q(r.sapPriceNoIva)}/${r.sapUnitLabel} <span style="font-size:9px">+IVA</span></td>
+<td style="padding:7px 6px;text-align:right;font-weight:700;color:#15803d">${Q(r.sapLineTotalWithIva)}</td>
+</tr>`).join('') : (ord.bonusLines||[]).map(bl => {
 const p  = S.products.find(x=>x.id===Number(bl.productId));
 const pr = bl.price||0;
 const ul = p?.unitLabel||'unidad';
@@ -2970,8 +3080,9 @@ ${cmtsQuote}
 </tr></thead>
 <tbody>${rows}${bonusSepQ}${bonusRows}</tbody>
 </table>
-<div class="qt-total">TOTAL: <span style="color:#b45309">${Q(ord.pricesIncIva ? tot : ord.applyIva ? tot*1.12 : tot)}</span></div>
+<div class="qt-total">TOTAL: <span style="color:#b45309">${Q(sapCalc ? sapCalc.totalConIva : (ord.pricesIncIva ? tot : ord.applyIva ? tot*1.12 : tot))}</span></div>
 ${(()=>{
+if(sapCalc) return '<div style=\"font-size:11px;color:#6b7280;text-align:right;margin-top:4px;padding-top:4px\">Subtotal (SAP, sin IVA): '+Q(sapCalc.subtotalSinIva)+' &nbsp;+&nbsp; IVA 12%: '+Q(sapCalc.ivaMonto)+'</div>';
 if(ord.pricesIncIva) return '<div style=\"font-size:11px;color:#6b7280;text-align:right;margin-top:4px;padding-top:4px\">Precio incluye IVA &nbsp;·&nbsp; Base: '+Q(tot/1.12)+' &nbsp;+&nbsp; IVA 12%: '+Q(tot-tot/1.12)+'</div>';
 if(ord.applyIva)    return '<div style=\"font-size:11px;color:#6b7280;text-align:right;margin-top:4px;padding-top:4px\">Subtotal: '+Q(tot)+' &nbsp;+&nbsp; IVA 12%: '+Q(tot*0.12)+'</div>';
 return '';
@@ -3062,9 +3173,13 @@ function fallbackDownload(html, css) {
 function shareOrderEmail() {
 if (!currentQuote) return;
 const ord = currentQuote;
+const sapCalc = ord.sapMode ? getSapCalcForOrder(ord) : null;
 
 // Productos con 》y precio
-const prodLines = ord.items.map(it => {
+const prodLines = sapCalc ? sapCalc.items.map(r => {
+  const spec = r.specLabel ? ` (${r.specLabel})` : '';
+  return `》${r.qty} ${r.name}${spec}\nPrecio: ${Q(r.sapPriceNoIva)}/${r.sapUnitLabel} + IVA`;
+}).join('\n') : ord.items.map(it => {
   const p  = S.products.find(x => x.id===(it.productId||Number(it.pid)));
   const pr = (it.customPrice != null) ? it.customPrice : cliPrice(ord.clientId, it.productId||it.pid, p?.basePrice||0);
   const ul = p?.unitLabel||'unidad';
@@ -3074,7 +3189,11 @@ const prodLines = ord.items.map(it => {
 }).join('\n');
 
 // Bonificaciones
-const bonusLines = (ord.bonusLines||[]).map(bl => {
+const bonusLines = sapCalc ? sapCalc.bonusLines.map(r => {
+  const spec = r.specLabel ? ` (${r.specLabel})` : '';
+  const comment = r.ruleName ? `\n${r.ruleName}` : '';
+  return `${r.qty} ${r.name}${spec}\nPrecio: ${Q(r.sapPriceNoIva)}/${r.sapUnitLabel} +IVA${comment}`;
+}).join('\n') : (ord.bonusLines||[]).map(bl => {
   const p  = S.products.find(x => x.id===Number(bl.productId));
   const ul = p?.unitLabel||'unidad';
   const spec = p?.presentation ? ` (${p.presentation})` : '';
@@ -3085,7 +3204,7 @@ const bonusLines = (ord.bonusLines||[]).map(bl => {
 const bonusBlock = bonusLines ? `》BONIFICACIÓN《\n${bonusLines}` : '';
 
 const tot = orderTotal(ord.items, ord.clientId);
-const totalFinal = ord.applyIva ? tot*1.12 : tot;
+const totalFinal = sapCalc ? sapCalc.totalConIva : (ord.applyIva ? tot*1.12 : tot);
 
 // Comentarios con bullet •
 const cmts = (ord.comments && ord.comments.length ? ord.comments : (ord.note ? [ord.note] : [])).filter(c=>c&&c.trim());
@@ -3124,6 +3243,7 @@ location.href = 'whatsapp://send?text=' + encodeURIComponent(text);
 function buildQuoteText(ord) {
 const b   = S.biz;
 const tot = orderTotal(ord.items, ord.clientId);
+const sapCalc = ord.sapMode ? getSapCalcForOrder(ord) : null;
 const qNum = ord.quote || '';
 const fechaSolo = (ord.date||'').split(',')[0];
 
@@ -3147,23 +3267,34 @@ cmts.filter(Boolean).forEach(c => { t += `- ${c}\n`; });
 
 // Productos
 t += '\n';
-ord.items.forEach(it => {
-  const p   = S.products.find(x => x.id===(it.productId||Number(it.pid)));
-  const pr  = (it.customPrice != null) ? it.customPrice : cliPrice(ord.clientId, it.productId||it.pid, p?.basePrice||0);
-  const ul  = p?.unitLabel||'unidad';
-  const spec = itemSpecLabel(it,p) ? ` (${itemSpecLabel(it,p)})` : '';
-  const ivaText = ord.applyIva ? ' +IVA' : '';
-  t += `- ${it.qty} *${p?p.name.toUpperCase():'—'}${spec}*\n`;
-  t += `  Precio ${Q(pr)}/${ul}${ivaText}\n`;
-});
+if (sapCalc) {
+  sapCalc.items.forEach(r => {
+    const spec = r.specLabel ? ` (${r.specLabel})` : '';
+    t += `- ${r.qty} *${r.name.toUpperCase()}${spec}*\n`;
+    t += `  Precio ${Q(r.sapPriceNoIva)}/${r.sapUnitLabel} +IVA\n`;
+  });
+} else {
+  ord.items.forEach(it => {
+    const p   = S.products.find(x => x.id===(it.productId||Number(it.pid)));
+    const pr  = (it.customPrice != null) ? it.customPrice : cliPrice(ord.clientId, it.productId||it.pid, p?.basePrice||0);
+    const ul  = p?.unitLabel||'unidad';
+    const spec = itemSpecLabel(it,p) ? ` (${itemSpecLabel(it,p)})` : '';
+    const ivaText = ord.applyIva ? ' +IVA' : '';
+    t += `- ${it.qty} *${p?p.name.toUpperCase():'—'}${spec}*\n`;
+    t += `  Precio ${Q(pr)}/${ul}${ivaText}\n`;
+  });
+}
 
 // Total
-const totalFinal = ord.applyIva ? tot*1.12 : tot;
-const ivaLabel = ord.applyIva ? ' _(IVA incluido)_' : '';
+const totalFinal = sapCalc ? sapCalc.totalConIva : (ord.applyIva ? tot*1.12 : tot);
+const ivaLabel = (sapCalc || ord.applyIva) ? ' _(IVA incluido)_' : '';
 t += `\n*TOTAL: ${Q(totalFinal)}*${ivaLabel}\n`;
 
 // Bonificaciones
-const bonusLines = (ord.bonusLines||[]).map(bl => {
+const bonusLines = sapCalc ? sapCalc.bonusLines.map(r => {
+  const spec = r.specLabel ? ` (${r.specLabel})` : '';
+  return `- ${r.qty} *${r.name.toUpperCase()}${spec}*\n  Precio ${Q(r.sapPriceNoIva)}/${r.sapUnitLabel} +IVA`;
+}).join('\n') : (ord.bonusLines||[]).map(bl => {
   const p  = S.products.find(x=>x.id===Number(bl.productId));
   const ul = p?.unitLabel||'unidad';
   const spec = p?.presentation ? ` (${p.presentation})` : '';

@@ -170,22 +170,34 @@ function renderRoutes() {
       : orderedOrders;
     const pend   = orders.filter(o=>o.status==='Confirmado').length;
     const fact   = orders.filter(o=>o.status==='Concluido').length;
-    const tot    = orders.reduce((s,o)=>{const b=orderTotal(o.items,o.clientId);return s+(o.applyIva?b*1.12:b);},0);
+    const tot    = orders.reduce((s,o)=>{
+      if (o.sapMode) { const sc = getSapCalcForOrder(o); return s + (sc ? sc.totalConIva : 0); }
+      const b=orderTotal(o.items,o.clientId);return s+(o.applyIva?b*1.12:b);
+    },0);
     const isOpen   = !!window._routeOpen[r.id];
     const isPinned = (S.pinnedRoutes||[]).includes(r.id);
 
     const ordRows = filteredOrders.length ? filteredOrders.map((o, rIdx) => {
       const oTot = orderTotal(o.items,o.clientId);
-      const oDisp = o.applyIva ? oTot*1.12 : oTot;
+      const sapCalc = o.sapMode ? getSapCalcForOrder(o) : null;
+      const oDisp = sapCalc ? sapCalc.totalConIva : (o.applyIva ? oTot*1.12 : oTot);
       const statusColor = isOrderBlocked(o)?'#a855f7':o.status==='Concluido'?'#4ade80':o.status==='Confirmado'?'#60a5fa':'#f1f5f9';
       const items = o.items.map(it=>{
         const p=S.products.find(x=>x.id===(it.productId||Number(it.pid)));
         return `<span style="font-size:11px;color:#94a3b8">• ${p?p.name:'—'} ×${it.qty}</span>`;
       }).join(' ');
       const ordOpen = window._ordOpen && window._ordOpen[o.id];
-      const itemsHtml = o.items.map(it => {
+      const itemsHtml = sapCalc ? sapCalc.items.map(r => {
+        const specText = r.specLabel ? ` <span style="color:#64748b;font-weight:400;font-size:11px">(${r.specLabel})</span>` : '';
+        return `<div style="font-size:12px;padding:5px 0;border-bottom:1px solid #1e2640">
+          <div style="display:flex;justify-content:space-between;align-items:baseline;gap:6px">
+            <span style="color:#f1f5f9;font-weight:600;flex:1;min-width:0">${r.qty} ${r.name}${specText} × ${Q(r.sapPriceNoIva)}/${r.sapUnitLabel} <span style="color:#facc15;font-size:10px">+IVA</span></span>
+            <span style="color:#f1f5f9;font-weight:700;flex-shrink:0">${Q(r.sapLineTotalWithIva)}</span>
+          </div>
+        </div>`;
+      }).join('') : o.items.map(it => {
         const p   = S.products.find(x => x.id === (it.productId || Number(it.pid)));
-        const pres = p?.presentation || p?.presentacion || '';
+        const pres = itemSpecLabel(it,p);
         const pr  = (it.customPrice != null) ? it.customPrice : cliPrice(o.clientId, it.productId||it.pid, p?.basePrice||0);
         const ul  = p?.unitLabel || 'unidad';
         const us  = Number(p?.unitSize) || 1;
@@ -232,6 +244,7 @@ function renderRoutes() {
           <!-- Total y bonif -->
           <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
             <span style="font-size:13px;font-weight:700;color:#f1f5f9">TOTAL ${Q(oDisp)}</span>
+            ${sapCalc?'<span style="font-size:9px;font-weight:700;color:#fff;background:#7c3aed;padding:1px 6px;border-radius:4px">🧮 SAP</span>':''}
             ${(o.bonusLines&&o.bonusLines.length)?(()=>{
               const av = o.bonusLines.every(bl => bl.fromRuleId != null);
               const ae = o.bonusLines.every(bl => bl.exceptional);
@@ -245,7 +258,10 @@ function renderRoutes() {
           <!-- Bonificación -->
           ${(()=>{
             if (!o.bonusLines||!o.bonusLines.length) return '';
-            const bLines = o.bonusLines.map(bl=>{
+            const bLines = sapCalc ? sapCalc.bonusLines.map(r=>{
+              const spec = r.specLabel?` (${r.specLabel})`:'';
+              return `<div style="font-size:11px;color:#f1f5f9;font-weight:600;padding:2px 0;border-bottom:1px solid #1e2640">${r.qty} ${r.name}${spec} × ${Q(r.sapPriceNoIva)}/${r.sapUnitLabel} <span style="font-size:9px;color:#facc15">+IVA</span></div>`;
+            }).join('') : o.bonusLines.map(bl=>{
               const p = S.products.find(x=>x.id===Number(bl.productId));
               const spec = p?.presentation?` (${p.presentation})`:'';
               const ul = p?.unitLabel||'unidad';
@@ -872,14 +888,25 @@ function generateRouteReport(rid, selIds, returnHTML=false) {
     orders.sort((a,b) => _cmp(a,b,rSort1) || _cmp(a,b,rSort2) || _cmp(a,b,rSort3));
   }
   const b = S.biz;
-  const tDisp = orders.reduce((s,o)=>{const bv=orderTotal(o.items,o.clientId);return s+(o.applyIva?bv*1.12:bv);},0);
-  const tPend = orders.filter(o=>o.status==='Confirmado').reduce((s,o)=>{const bv=orderTotal(o.items,o.clientId);return s+(o.applyIva?bv*1.12:bv);},0);
-  const tFact = orders.filter(o=>o.status==='Concluido').reduce((s,o)=>{const bv=orderTotal(o.items,o.clientId);return s+(o.applyIva?bv*1.12:bv);},0);
+  // Total con IVA por pedido: si está en modo SAP, usa el convertido.
+  function _ordDispTotal(o) {
+    if (o.sapMode) { const sc = getSapCalcForOrder(o); return sc ? sc.totalConIva : 0; }
+    const bv = orderTotal(o.items, o.clientId);
+    return o.applyIva ? bv*1.12 : bv;
+  }
+  const tDisp = orders.reduce((s,o)=>s+_ordDispTotal(o),0);
+  const tPend = orders.filter(o=>o.status==='Confirmado').reduce((s,o)=>s+_ordDispTotal(o),0);
+  const tFact = orders.filter(o=>o.status==='Concluido').reduce((s,o)=>s+_ordDispTotal(o),0);
 
   const rows = orders.map((o, rIdx) => {
-    const tot  = orderTotal(o.items,o.clientId);
-    const disp = o.applyIva ? tot*1.12 : tot;
-    const items = o.items.map(it => {
+    const disp = _ordDispTotal(o);
+    const sapCalc = o.sapMode ? getSapCalcForOrder(o) : null;
+    const items = sapCalc ? sapCalc.items.map(r => `<tr>
+        <td style="padding:5px 8px">${r.name}${r.specLabel?` <span style="color:#374151">(${r.specLabel})</span>`:''}</td>
+        <td style="padding:5px 8px;text-align:center">${r.qty}</td>
+        <td style="padding:5px 8px;text-align:right">${Q(r.sapPriceNoIva)}/${r.sapUnitLabel}<br><small style="color:#2563eb">+IVA</small></td>
+        <td style="padding:5px 8px;text-align:right;font-weight:700">${Q(r.sapLineTotalWithIva)}</td>
+      </tr>`).join('') : o.items.map(it => {
       const p  = S.products.find(x=>x.id===(it.productId||Number(it.pid)));
       const pr = (it.customPrice!=null)?it.customPrice:cliPrice(o.clientId,it.productId||it.pid,p?.basePrice||0);
       const us = Number(p?.unitSize)||1;
@@ -900,7 +927,12 @@ function generateRouteReport(rid, selIds, returnHTML=false) {
     ].filter(Boolean).join(' &nbsp;·&nbsp; ');
     const deliveryHtmlR = o.delivery ? `<div style="padding:4px 12px;font-size:16px;background:#f0f9ff;border-top:1px solid #bae6fd;color:#0369a1;font-weight:700">📍 Entrega: ${o.delivery}</div>` : '';
     // Bonificaciones
-    const bonusRows = (o.bonusLines||[]).map(bl => {
+    const bonusRows = sapCalc ? sapCalc.bonusLines.map(r => `<tr style="background:#eff6ff">
+        <td style="padding:5px 8px;color:#15803d"><small style="font-weight:700">${r.name}${r.specLabel?' ('+r.specLabel+')':''}</small>${r.ruleName&&r.ruleName!=='Manual'?`<br><small style="color:#6b7280">${r.ruleName}</small>`:''}</td>
+        <td style="padding:5px 8px;text-align:center;color:#15803d">${r.qty}</td>
+        <td style="padding:5px 8px;text-align:right;color:#15803d">${Q(r.sapPriceNoIva)}/${r.sapUnitLabel} <small>+IVA</small></td>
+        <td style="padding:5px 8px;text-align:right;font-weight:700;color:#15803d">${Q(r.sapLineTotalWithIva)}</td>
+      </tr>`).join('') : (o.bonusLines||[]).map(bl => {
       const p  = S.products.find(x=>x.id===Number(bl.productId));
       const ul = p?.unitLabel||'unidad';
       const us = Number(p?.unitSize)||1;
@@ -945,7 +977,7 @@ function generateRouteReport(rid, selIds, returnHTML=false) {
         <tbody>${items}${bonusSep}${bonusRows}</tbody>
       </table>
       <div style="padding:5px 12px;text-align:right;font-weight:800;font-size:13px;border-top:1px solid #e5e7eb;background:#fafafa">
-        TOTAL: ${Q(disp)}${o.applyIva?'<span style="font-size:10px;font-weight:400;color:#6b7280;margin-left:5px">(IVA incl.)</span>':''}
+        TOTAL: ${Q(disp)}${(sapCalc||o.applyIva)?'<span style="font-size:10px;font-weight:400;color:#6b7280;margin-left:5px">(IVA incl.)</span>':''}${sapCalc?'<span style="font-size:9px;font-weight:700;color:#7c3aed;margin-left:6px">🧮 SAP</span>':''}
       </div>
     </div>`;
   }).join('');
