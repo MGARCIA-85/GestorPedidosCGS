@@ -488,29 +488,25 @@ function setPid(i, val) {
   }
   renderItems();
 }
-function setSpecId(i, val) {
-  if (!ordItems[i]) return;
-  ordItems[i].specId = val ? Number(val) : null;
-  if (window._specEditOpen) window._specEditOpen[i] = false;
-  refreshSub(i, Number(document.getElementById('ord-cli').value));
+function toggleSpecDrop(i) {
+  const d = document.getElementById('spec-drop-'+i);
+  if (!d) return;
+  d.classList.toggle('open');
 }
-function openSpecEdit(i) {
-  if (!window._specEditOpen) window._specEditOpen = {};
-  window._specEditOpen[i] = true;
-  refreshSub(i, Number(document.getElementById('ord-cli').value));
-  const sel = document.querySelector(`#sub${i} select.tag`);
-  // .click() (no solo .focus()) para que el desplegable nativo se abra de
-  // una vez, dentro del mismo toque que activó el selector.
-  if (sel) { sel.focus(); sel.click(); }
-}
-function closeSpecEdit(i) {
-  // Pequeño delay para permitir que el "change" del select (si lo hubo) se
-  // procese antes de cerrar el modo edición
+function closeSpecDropSoon(i) {
+  // Pequeño delay para permitir que el "mousedown" de una opción (si lo
+  // hubo) se procese antes de cerrar el desplegable
   setTimeout(() => {
-    if (!window._specEditOpen || !window._specEditOpen[i]) return;
-    window._specEditOpen[i] = false;
-    refreshSub(i, Number(document.getElementById('ord-cli').value));
-  }, 150);
+    const d = document.getElementById('spec-drop-'+i);
+    if (d) d.classList.remove('open');
+  }, 200);
+}
+function chooseSpec(i, specId) {
+  if (!ordItems[i]) return;
+  ordItems[i].specId = Number(specId);
+  const d = document.getElementById('spec-drop-'+i);
+  if (d) d.classList.remove('open');
+  refreshSub(i, Number(document.getElementById('ord-cli').value));
 }
 function setPrice(i, val) {
 if(!ordItems[i]) return;
@@ -707,8 +703,6 @@ const fallbackSpec = activeSpecs[0] || p.specs[0];
 const chosenSpec = trueChosen || (canPickSpec ? null : fallbackSpec);
 const specLabel = chosenSpec ? chosenSpec.label : (canPickSpec ? '' : (p.presentation||''));
 const needsSpecChoice = canPickSpec && !trueChosen;
-if (!window._specEditOpen) window._specEditOpen = {};
-const editingSpec = canPickSpec && window._specEditOpen[i];
 const listPrice = cliPrice(cid, p.id, p.basePrice);
 const prRaw = (it && it.price!=null)? it.price : listPrice;
 // Mostrar precio de lista como referencia en el label con color
@@ -734,18 +728,26 @@ IVA 12%: <span style="color:#60a5fa">${Q(ivaAmt)}</span>
 const remBtnInline = ordItems.length > 1
   ? `<button class="br" style="padding:4px 10px;font-size:12px;margin-left:8px" onclick="remItem(${i})">✕</button>` : '';
 // La etiqueta de especificación: si el producto tiene más de una activa,
-// es tocable y se convierte en el propio selector. Mientras no se haya
-// elegido, aparece vacía y en rojo como aviso; al elegir, se pone blanca.
-// Si solo tiene una especificación, queda igual que siempre (informativa).
+// es tocable y despliega (con el mismo mecanismo del buscador de producto,
+// no un <select> nativo, para que abra siempre con un solo toque) la lista
+// de especificaciones. Mientras no se haya elegido, aparece vacía y en
+// rojo como aviso; al elegir, se pone blanca. Si solo tiene una
+// especificación, queda igual que siempre (informativa, no tocable).
 const tagBaseStyle = 'font-size:12px;padding:4px 11px;font-weight:700';
-const specTagHtml = editingSpec
-  ? `<select class="tag" style="cursor:pointer;${tagBaseStyle}" onchange="setSpecId(${i}, this.value)" onblur="closeSpecEdit(${i})">
-      <option value="">-- Elegir --</option>
-      ${activeSpecs.map(s=>`<option value="${s.id}" ${String(it.specId)===String(s.id)?'selected':''}>${s.label}${s.weightKg?' · '+s.weightKg+'kg':''}</option>`).join('')}
-    </select>`
-  : (needsSpecChoice
-      ? `<span class="tag" onclick="openSpecEdit(${i})" title="Toca para elegir la especificación" style="cursor:pointer;background:#2a1010;border:1px solid #ef4444;color:#ef4444;${tagBaseStyle}">&nbsp;&nbsp;&nbsp; ▾</span>`
-      : (specLabel ? `<span class="tag"${canPickSpec?` onclick="openSpecEdit(${i})" style="cursor:pointer;color:#f1f5f9;${tagBaseStyle}"`:` style="${tagBaseStyle}"`}>${specLabel}${canPickSpec?' ▾':''}</span>` : '<span></span>'));
+let specTagHtml;
+if (canPickSpec) {
+  const tagStyle = needsSpecChoice
+    ? `cursor:pointer;background:#2a1010;border:1px solid #ef4444;color:#ef4444;${tagBaseStyle}`
+    : `cursor:pointer;color:#f1f5f9;${tagBaseStyle}`;
+  const tagText = needsSpecChoice ? '&nbsp;&nbsp;&nbsp; ▾' : `${specLabel} ▾`;
+  const dropOpts = activeSpecs.map(s => `<div class="ac-opt" onmousedown="chooseSpec(${i},${s.id})">${s.label}${s.sku?' · SKU '+s.sku:''}${s.weightKg?' · '+s.weightKg+'kg':''}</div>`).join('');
+  specTagHtml = `<div style="position:relative;display:inline-block">
+<span class="tag" tabindex="0" onclick="toggleSpecDrop(${i})" onblur="closeSpecDropSoon(${i})" title="Toca para elegir la especificación" style="${tagStyle}">${tagText}</span>
+<div class="ac-drop" id="spec-drop-${i}" style="min-width:170px">${dropOpts}</div>
+</div>`;
+} else {
+  specTagHtml = specLabel ? `<span class="tag" style="${tagBaseStyle}">${specLabel}</span>` : '<span></span>';
+}
 el.innerHTML = `<div style="background:#161929;border-radius:8px;padding:8px 10px">
 <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
 ${specTagHtml}
