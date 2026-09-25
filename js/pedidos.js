@@ -133,10 +133,17 @@ function acProdInput(i) {
     acOpen('ac-prod-drop-'+i); return;
   }
 
-  // Mostrar matches de la lista (una fila por especificación activa, si el
-  // producto tiene más de una — así se elige producto y especificación en
-  // el mismo paso, sin un selector aparte)
-  matches.forEach(p => appendProdOptions(drop, p, cid, txt, i, { outside:false }));
+  // Mostrar matches de la lista
+  matches.forEach(p => {
+    const pr = cliPrice(cid, p.id, p.basePrice);
+    const d = document.createElement('div');
+    d.className = 'ac-opt';
+    if (p.color) { d.style.cssText = `border-left:4px solid ${p.color}`; }
+    const nameSpan = p.color ? `<span style="color:${p.color};font-weight:700">${p.name}</span>` : p.name;
+    d.innerHTML = nameSpan + '<small>'+(p.presentation||'')+(p.family?' · '+p.family:'')+' — '+Q(pr)+'</small>';
+    d.onmousedown = () => { txt.value = p.name; acClose('ac-prod-drop-'+i); setPid(i, p.id); };
+    drop.appendChild(d);
+  });
 
   // Separador + matches fuera de la lista
   if (outsideMatches.length) {
@@ -144,9 +151,14 @@ function acProdInput(i) {
     sep.style.cssText = 'font-size:10px;font-weight:800;color:#f59e0b;padding:6px 12px 2px;text-transform:uppercase;letter-spacing:1px;background:#161929';
     sep.textContent = '+ Fuera de la lista — asignar al agregar';
     drop.appendChild(sep);
-    outsideMatches.forEach(p => appendProdOptions(drop, p, cid, txt, i, {
-      outside: true,
-      onExtra: () => {
+    outsideMatches.forEach(p => {
+      const pr = cliPrice(cid, p.id, p.basePrice);
+      const d = document.createElement('div');
+      d.className = 'ac-opt';
+      d.style.cssText = 'opacity:.85;border-left:3px solid #f59e0b';
+      d.innerHTML = p.name + '<small>'+(p.presentation||'')+(p.family?' · '+p.family:'')+' — '+Q(pr)+'</small>';
+      d.onmousedown = () => {
+        // Asignar a la lista del cliente y agregar al pedido
         const cp2 = S.cp[cid] || {};
         let vis = (cp2._visible || []).map(Number);
         if (!vis.includes(Number(p.id))) vis.push(Number(p.id));
@@ -154,58 +166,15 @@ function acProdInput(i) {
         S.cp[cid] = cp2;
         save();
         toast('📌 '+p.name+' asignado a este cliente','#10b981');
-      }
-    }));
+        txt.value = p.name;
+        acClose('ac-prod-drop-'+i);
+        setPid(i, p.id);
+      };
+      drop.appendChild(d);
+    });
   }
 
   acOpen('ac-prod-drop-'+i);
-}
-
-// Agrega al desplegable del autocompletado de producto una fila (si el
-// producto solo tiene una especificación activa) o una fila por cada
-// especificación activa (si tiene varias), para elegir producto y
-// especificación en el mismo paso.
-function appendProdOptions(drop, p, cid, txt, i, opts) {
-  ensureProductSpecs(p);
-  const activeSpecs = p.specs.filter(s => s.active);
-  const pr = cliPrice(cid, p.id, p.basePrice);
-  const baseStyle = opts.outside ? 'opacity:.85;border-left:3px solid #f59e0b' : (p.color ? `border-left:4px solid ${p.color}` : '');
-  const nameSpan = p.color ? `<span style="color:${p.color};font-weight:700">${p.name}</span>` : p.name;
-
-  if (activeSpecs.length <= 1) {
-    const d = document.createElement('div');
-    d.className = 'ac-opt';
-    if (baseStyle) d.style.cssText = baseStyle;
-    d.innerHTML = nameSpan + '<small>'+(p.presentation||'')+(p.family?' · '+p.family:'')+' — '+Q(pr)+'</small>';
-    d.onmousedown = () => {
-      if (opts.onExtra) opts.onExtra();
-      txt.value = p.name;
-      acClose('ac-prod-drop-'+i);
-      setPidSpec(i, p.id, activeSpecs.length===1 ? activeSpecs[0].id : null);
-    };
-    drop.appendChild(d);
-    return;
-  }
-
-  // Varias especificaciones activas: encabezado con el producto y una fila
-  // por cada especificación para elegir directamente
-  const head = document.createElement('div');
-  head.style.cssText = 'padding:6px 12px 2px;font-size:10px;font-weight:800;color:#64748b;text-transform:uppercase;letter-spacing:.5px' + (opts.outside?';background:#161929':'');
-  head.textContent = p.name + (p.family?' · '+p.family:'');
-  drop.appendChild(head);
-  activeSpecs.forEach(s => {
-    const d = document.createElement('div');
-    d.className = 'ac-opt';
-    d.style.cssText = (baseStyle?baseStyle+';':'') + 'padding-left:22px';
-    d.innerHTML = `<span style="color:${p.color||'#f1f5f9'};font-weight:700">${s.label}</span><small>${s.sku?'SKU '+s.sku+' · ':''}${s.weightKg?s.weightKg+'kg · ':''}${Q(pr)}</small>`;
-    d.onmousedown = () => {
-      if (opts.onExtra) opts.onExtra();
-      txt.value = p.name;
-      acClose('ac-prod-drop-'+i);
-      setPidSpec(i, p.id, s.id);
-    };
-    drop.appendChild(d);
-  });
 }
 
 // ═══════════════════════════════════════════════════════
@@ -444,21 +413,32 @@ opts += '</optgroup>';
 });
 const remBtn = '';
 const selectedP = it.pid ? S.products.find(p=>String(p.id)===String(it.pid)) : null;
+let activeSpecsForRow = [];
 if (selectedP) {
   ensureProductSpecs(selectedP);
-  const activeSpecs = selectedP.specs.filter(s => s.active);
-  if (activeSpecs.length === 1 && it.specId == null) it.specId = activeSpecs[0].id;
+  activeSpecsForRow = selectedP.specs.filter(s => s.active);
+  if (activeSpecsForRow.length === 1 && it.specId == null) it.specId = activeSpecsForRow[0].id;
 }
+const needsSpecSelect = activeSpecsForRow.length > 1;
+const prodFlex = needsSpecSelect ? '1.5' : '3';
+const specColHtml = needsSpecSelect ? `
+<div style="flex:1.3"><label class="lbl">Especif.</label>
+<select class="inp" style="margin-bottom:0" onchange="setSpecId(${i}, this.value)">
+  <option value="">-- Elegir --</option>
+  ${activeSpecsForRow.map(s=>`<option value="${s.id}" ${String(it.specId)===String(s.id)?'selected':''}>${s.label}${s.weightKg?' · '+s.weightKg+'kg':''}</option>`).join('')}
+</select>
+</div>` : '';
 const moveUpBtn = i > 0 ? `<button type="button" onclick="moveItemUp(${i})" style="background:#2a3050;border:none;border-radius:5px;color:#94a3b8;width:26px;height:26px;font-size:13px;cursor:pointer">▲</button>` : `<div style="width:26px;height:26px"></div>`;
 const moveDownBtn = i < ordItems.length-1 ? `<button type="button" onclick="moveItemDown(${i})" style="background:#2a3050;border:none;border-radius:5px;color:#94a3b8;width:26px;height:26px;font-size:13px;cursor:pointer">▼</button>` : `<div style="width:26px;height:26px"></div>`;
 card.innerHTML = `
 <div style="display:flex;gap:8px;align-items:flex-end">
 <div style="display:flex;flex-direction:column;gap:3px;flex-shrink:0">${moveUpBtn}${moveDownBtn}</div>
-<div style="flex:3"><label class="lbl">Producto</label>
+<div style="flex:${prodFlex}"><label class="lbl">Producto</label>
 <div class="ac-wrap" style="position:relative">
 <input class="inp ac-inp" id="prod-txt-${i}" autocomplete="off" placeholder="Buscar producto..." value="${it.pid ? (S.products.find(p=>String(p.id)===String(it.pid))||{name:''}).name : ''}" oninput="acProdInput(${i})" onfocus="acProdInput(${i})" onblur="acBlur('ac-prod-drop-${i}')" style="margin-bottom:0${selectedP&&selectedP.color?`;border-left:4px solid ${selectedP.color};color:${selectedP.color};font-weight:700`:''}"/>
 <div class="ac-drop" id="ac-prod-drop-${i}"></div>
 </div></div>
+${specColHtml}
 <div style="flex:1"><label class="lbl">Cantidad</label>
 <input class="inp" id="qty${i}" type="number" min="1" step="1" value="${it.qty}"
 style="margin-bottom:0" oninput="setQty(${i},this.value)"/></div>
@@ -497,25 +477,27 @@ function moveItemDown(i) {
   renderItems();
 }
 
-function setPidSpec(i, val, specId) {
+function setPid(i, val) {
   ordItems[i].pid = val;
-  ordItems[i].specId = specId != null ? Number(specId) : null;
   const cid = Number(document.getElementById('ord-cli').value);
   const p   = S.products.find(x => x.id === Number(val));
   if (p) {
+    ensureProductSpecs(p);
+    const activeSpecs = p.specs.filter(s => s.active);
+    // Si solo hay una especificación activa, se autoselecciona; si hay
+    // varias, queda sin elegir hasta que el usuario la escoja en la línea.
+    ordItems[i].specId = activeSpecs.length === 1 ? activeSpecs[0].id : null;
     const listPrice = cliPrice(cid, p.id, p.basePrice);
     // Precargar con precio de lista (no el histórico)
     ordItems[i].price = listPrice;
+  } else {
+    ordItems[i].specId = null;
   }
   renderItems();
 }
-// Compatibilidad: resuelve la especificación automáticamente (útil si algo
-// llama a setPid directamente sin pasar por el desplegable de producto)
-function setPid(i, val) {
-  const p = S.products.find(x => x.id === Number(val));
-  let specId = null;
-  if (p) { ensureProductSpecs(p); const active = p.specs.filter(s=>s.active); specId = active.length===1 ? active[0].id : null; }
-  setPidSpec(i, val, specId);
+function setSpecId(i, val) {
+  if (!ordItems[i]) return;
+  ordItems[i].specId = val ? Number(val) : null;
 }
 function setPrice(i, val) {
 if(!ordItems[i]) return;
