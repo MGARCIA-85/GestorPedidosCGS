@@ -699,10 +699,13 @@ const it = ordItems[i]; if (!it.pid) { el.innerHTML=''; return; }
 const p  = S.products.find(x => x.id===Number(it.pid)); if (!p) { el.innerHTML=''; return; }
 ensureProductSpecs(p);
 const activeSpecs = p.specs.filter(s=>s.active);
-const chosenSpec = p.specs.find(s => String(s.id)===String(it.specId)) || activeSpecs[0] || p.specs[0];
-const specLabel = chosenSpec ? chosenSpec.label : (p.presentation||'');
-if (!window._specEditOpen) window._specEditOpen = {};
 const canPickSpec = activeSpecs.length > 1;
+const trueChosen = activeSpecs.find(s => String(s.id)===String(it.specId));
+const fallbackSpec = activeSpecs[0] || p.specs[0];
+const chosenSpec = trueChosen || (canPickSpec ? null : fallbackSpec);
+const specLabel = chosenSpec ? chosenSpec.label : (canPickSpec ? '' : (p.presentation||''));
+const needsSpecChoice = canPickSpec && !trueChosen;
+if (!window._specEditOpen) window._specEditOpen = {};
 const editingSpec = canPickSpec && window._specEditOpen[i];
 const listPrice = cliPrice(cid, p.id, p.basePrice);
 const prRaw = (it && it.price!=null)? it.price : listPrice;
@@ -729,14 +732,18 @@ IVA 12%: <span style="color:#60a5fa">${Q(ivaAmt)}</span>
 const remBtnInline = ordItems.length > 1
   ? `<button class="br" style="padding:4px 10px;font-size:12px;margin-left:8px" onclick="remItem(${i})">✕</button>` : '';
 // La etiqueta de especificación: si el producto tiene más de una activa,
-// es tocable y se convierte en el propio selector; si solo tiene una,
-// queda igual que siempre (informativa, sin nada que elegir).
+// es tocable y se convierte en el propio selector. Mientras no se haya
+// elegido, aparece vacía y en rojo como aviso; al elegir, se pone blanca.
+// Si solo tiene una especificación, queda igual que siempre (informativa).
+const tagBaseStyle = 'font-size:12px;padding:4px 11px;font-weight:700';
 const specTagHtml = editingSpec
-  ? `<select class="tag" style="cursor:pointer;padding:2px 5px" onchange="setSpecId(${i}, this.value)" onblur="closeSpecEdit(${i})">
+  ? `<select class="tag" style="cursor:pointer;${tagBaseStyle}" onchange="setSpecId(${i}, this.value)" onblur="closeSpecEdit(${i})">
       <option value="">-- Elegir --</option>
       ${activeSpecs.map(s=>`<option value="${s.id}" ${String(it.specId)===String(s.id)?'selected':''}>${s.label}${s.weightKg?' · '+s.weightKg+'kg':''}</option>`).join('')}
     </select>`
-  : (specLabel ? `<span class="tag"${canPickSpec?` onclick="openSpecEdit(${i})" style="cursor:pointer"`:''}>${specLabel}${canPickSpec?' ▾':''}</span>` : '<span></span>');
+  : (needsSpecChoice
+      ? `<span class="tag" onclick="openSpecEdit(${i})" title="Toca para elegir la especificación" style="cursor:pointer;background:#2a1010;border:1px solid #ef4444;color:#ef4444;${tagBaseStyle}">&nbsp;&nbsp;&nbsp; ▾</span>`
+      : (specLabel ? `<span class="tag"${canPickSpec?` onclick="openSpecEdit(${i})" style="cursor:pointer;color:#f1f5f9;${tagBaseStyle}"`:` style="${tagBaseStyle}"`}>${specLabel}${canPickSpec?' ▾':''}</span>` : '<span></span>'));
 el.innerHTML = `<div style="background:#161929;border-radius:8px;padding:8px 10px">
 <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap">
 ${specTagHtml}
