@@ -329,14 +329,14 @@ function renderOrdBonusRows() {
   wrap.innerHTML = ordBonusLines.map((bl,i) => {
     const pOpts = S.products.map(p=>`<option value="${p.id}" ${p.id===Number(bl.productId)?'selected':''}>${p.name}${p.presentation ? ' ('+p.presentation+')' : ''}</option>`).join('');
     const blP = S.products.find(p=>p.id===Number(bl.productId));
-    let specRow = '';
+    let specSelectHtml = '';
     if (blP) {
       ensureProductSpecs(blP);
       const activeSpecs = blP.specs.filter(s=>s.active);
       if (activeSpecs.length > 1) {
         if (bl.specId == null || !activeSpecs.some(s=>String(s.id)===String(bl.specId))) bl.specId = null;
         const needsChoice = bl.specId == null;
-        specRow = `<select onchange="ordBonusLines[${i}].specId=this.value?Number(this.value):null;window._bonusConfirmed=true;renderSapCalc()" style="width:100%;background:${needsChoice?'#2a1010':'#0d0f18'};color:${needsChoice?'#ef4444':'#f1f5f9'};border:1px solid ${needsChoice?'#ef4444':'#2a3050'};border-radius:6px;padding:4px 8px;font-size:11px;margin-bottom:4px">
+        specSelectHtml = `<select onchange="chooseBonusSpec(${i}, this.value)" style="flex:1;min-width:0;background:${needsChoice?'#2a1010':'#0d0f18'};color:${needsChoice?'#ef4444':'#f1f5f9'};border:1px solid ${needsChoice?'#ef4444':'#2a3050'};border-radius:6px;padding:4px 8px;font-size:11px">
           <option value="">-- Elegir especificación --</option>
           ${activeSpecs.map(s=>`<option value="${s.id}" ${String(bl.specId)===String(s.id)?'selected':''}>${s.label}${s.weightKg?' · '+s.weightKg+'kg':''}</option>`).join('')}
         </select>`;
@@ -344,14 +344,23 @@ function renderOrdBonusRows() {
         bl.specId = activeSpecs[0].id;
       }
     }
+    // Subtotal de la línea de bonificación (mismo cálculo usado en el
+    // desglose de bonificación del total), en la misma línea que la
+    // especificación.
+    const unitSize = blP ? (Number(blP.unitSize)||1) : 1;
+    const subtotal = (Number(bl.price)||0) * unitSize * (Number(bl.qty)||0);
+    const specAndSubRow = `<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
+      ${specSelectHtml || '<span></span>'}
+      <span style="font-size:11px;color:#10b981;font-weight:700;white-space:nowrap;margin-left:auto">Subtotal: ${Q(subtotal)}</span>
+    </div>`;
     return `<div style="background:#0d0f18;padding:6px;border-radius:7px;margin-bottom:5px">
       <div style="display:grid;grid-template-columns:1fr 45px 65px 28px;gap:4px;align-items:center;margin-bottom:4px">
         <select onchange="ordBonusLines[${i}].productId=Number(this.value);ordBonusLines[${i}].specId=null;window._bonusConfirmed=true;renderOrdBonusRows();refreshTotal(Number(document.getElementById('ord-cli').value))" style="background:#0d0f18;color:#f1f5f9;border:1px solid #2a3050;border-radius:6px;padding:4px;font-size:11px;min-width:0">${pOpts}</select>
-        <input type="number" value="${bl.qty||1}" min="1" onchange="ordBonusLines[${i}].qty=Number(this.value);window._bonusConfirmed=true;refreshTotal(Number(document.getElementById('ord-cli').value))" style="background:#0d0f18;color:#f1f5f9;border:1px solid #2a3050;border-radius:6px;padding:4px;font-size:11px;width:100%"/>
-        <input type="number" value="${bl.price||0}" min="0" step="0.01" onchange="ordBonusLines[${i}].price=Number(this.value);window._bonusConfirmed=true;refreshTotal(Number(document.getElementById('ord-cli').value))" style="background:#0d0f18;color:#f1f5f9;border:1px solid #2a3050;border-radius:6px;padding:4px;font-size:11px;width:100%"/>
+        <input type="number" value="${bl.qty||1}" min="1" onchange="ordBonusLines[${i}].qty=Number(this.value);window._bonusConfirmed=true;renderOrdBonusRows();refreshTotal(Number(document.getElementById('ord-cli').value))" style="background:#0d0f18;color:#f1f5f9;border:1px solid #2a3050;border-radius:6px;padding:4px;font-size:11px;width:100%"/>
+        <input type="number" value="${bl.price||0}" min="0" step="0.01" onchange="ordBonusLines[${i}].price=Number(this.value);window._bonusConfirmed=true;renderOrdBonusRows();refreshTotal(Number(document.getElementById('ord-cli').value))" style="background:#0d0f18;color:#f1f5f9;border:1px solid #2a3050;border-radius:6px;padding:4px;font-size:11px;width:100%"/>
         <button onclick="ordBonusLines.splice(${i},1);window._bonusConfirmed=true;renderOrdBonusRows();refreshTotal(Number(document.getElementById('ord-cli').value))" style="background:#ef444420;border:1px solid #ef4444;border-radius:5px;color:#ef4444;padding:2px 4px;font-size:11px;cursor:pointer">✕</button>
       </div>
-      ${specRow}
+      ${specAndSubRow}
       <input value="${bl.ruleName&&bl.ruleName!=='Manual'?bl.ruleName:''}" placeholder="Comentario (ej: Por consumo Trim. Q2)" onchange="ordBonusLines[${i}].ruleName=this.value||'Manual'" style="width:100%;background:#0d0f18;color:#f1f5f9;border:1px solid #2a3050;border-radius:6px;padding:4px 8px;font-size:11px;margin-bottom:4px"/>
       <label style="display:flex;align-items:center;gap:6px;font-size:11px;color:${bl.exceptional?'#f59e0b':'#64748b'};cursor:pointer">
         <input type="checkbox" ${bl.exceptional?'checked':''} onchange="ordBonusLines[${i}].exceptional=this.checked;window._bonusConfirmed=true;renderOrdBonusRows()" style="width:14px;height:14px;accent-color:#f59e0b"/>
@@ -508,6 +517,13 @@ function chooseSpec(i, val) {
   if (!ordItems[i]) return;
   ordItems[i].specId = val ? Number(val) : null;
   refreshSub(i, Number(document.getElementById('ord-cli').value));
+  renderSapCalc();
+}
+function chooseBonusSpec(i, val) {
+  if (!ordBonusLines[i]) return;
+  ordBonusLines[i].specId = val ? Number(val) : null;
+  window._bonusConfirmed = true;
+  renderOrdBonusRows();
   renderSapCalc();
 }
 function setPrice(i, val) {

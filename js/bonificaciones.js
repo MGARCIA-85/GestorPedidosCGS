@@ -144,7 +144,7 @@ function calcBonusProgress(cid, r, extraOrd) {
         });
       });
       const p = S.products.find(x=>x.id===Number(t.productId));
-      return { label: p ? p.name+' ('+(p.presentation||'')+')'  : '—', app: appUnits, manual: Number(t.manualUnits)||0, threshold: t.threshold, ti };
+      return { label: p ? p.name+'': '—', app: appUnits, manual: Number(t.manualUnits)||0, threshold: t.threshold, ti };
     });
   }
 }
@@ -239,11 +239,11 @@ function openBonusModal(cid, ri) {
     }
   }
 
-  const prodOpts = () => S.products.map(p=>`<option value="${p.id}">${p.name}${p.presentation ? ' ('+p.presentation+')' : ''}</option>`).join('');
+  const prodOpts = () => S.products.map(p=>`<option value="${p.id}">${p.name}</option>`).join('');
   const isPool = r.ruleType === 'pool';
 
   const targetsHtml = (targets) => (targets||[]).map((t,i)=>{
-    const sel = S.products.map(p=>`<option value="${p.id}" ${String(p.id)===String(t.productId)?'selected':''}>${p.name}${p.presentation ? ' ('+p.presentation+')' : ''}</option>`).join('');
+    const sel = S.products.map(p=>`<option value="${p.id}" ${String(p.id)===String(t.productId)?'selected':''}>${p.name}</option>`).join('');
     return `<div class="br-target-row" style="display:flex;gap:5px;align-items:center;margin-bottom:5px;overflow:hidden">
       <select class="br-tpid" style="flex:1;min-width:0;width:0;background:#0d0f18;color:#f1f5f9;border:1px solid #2a3050;border-radius:7px;padding:5px;font-size:12px">${sel}</select>
       <input type="number" class="br-tqty" value="${t.threshold||''}" placeholder="Umbral" min="1" style="width:65px;flex-shrink:0;background:#0d0f18;color:#f1f5f9;border:1px solid #2a3050;border-radius:7px;padding:5px;font-size:12px"/>
@@ -252,7 +252,7 @@ function openBonusModal(cid, ri) {
   }).join('');
 
   const poolHtml = (r2) => (r2.poolProds||[]).map(pid=>{
-    const sel = S.products.map(p=>`<option value="${p.id}" ${String(p.id)===String(pid)?'selected':''}>${p.name}${p.presentation ? ' ('+p.presentation+')' : ''}</option>`).join('');
+    const sel = S.products.map(p=>`<option value="${p.id}" ${String(p.id)===String(pid)?'selected':''}>${p.name}</option>`).join('');
     return `<div class="br-pool-row" style="display:flex;gap:5px;align-items:center;margin-bottom:5px">
       <select class="br-ppid" style="flex:1;background:#0d0f18;color:#f1f5f9;border:1px solid #2a3050;border-radius:7px;padding:5px;font-size:12px">${sel}</select>
       <button onclick="this.closest('.br-pool-row').remove()" style="background:#ef444420;border:1px solid #ef4444;border-radius:6px;color:#ef4444;padding:3px 7px;font-size:12px;cursor:pointer">x</button>
@@ -260,7 +260,7 @@ function openBonusModal(cid, ri) {
   }).join('');
 
   const poolEqHtml = (r2) => (r2.poolEqProds||[]).map(ep=>{
-    const sel = S.products.map(p=>`<option value="${p.id}" ${String(p.id)===String(ep.productId)?'selected':''}>${p.name}${p.presentation ? ' ('+p.presentation+')' : ''}</option>`).join('');
+    const sel = S.products.map(p=>`<option value="${p.id}" ${String(p.id)===String(ep.productId)?'selected':''}>${p.name}</option>`).join('');
     return `<div class="br-pooleq-row" style="display:flex;gap:5px;align-items:center;margin-bottom:5px">
       <select class="br-eqpid" style="flex:1;min-width:0;background:#0d0f18;color:#f1f5f9;border:1px solid #2a3050;border-radius:7px;padding:5px;font-size:11px">${sel}</select>
       <input type="number" class="br-eqfactor" value="${ep.factor||1}" min="0.01" step="0.01" placeholder="Factor" title="1 galón=1, 1 litro=0.5" style="width:70px;background:#0d0f18;color:#f1f5f9;border:1px solid #2a3050;border-radius:7px;padding:5px;font-size:12px"/>
@@ -269,7 +269,7 @@ function openBonusModal(cid, ri) {
   }).join('');
 
   const mixIndHtml = (r2) => (r2.mixIndTargets||[]).map((t,i)=>{
-    const sel = S.products.map(p=>`<option value="${p.id}" ${String(p.id)===String(t.productId)?'selected':''}>${p.name}${p.presentation?' ('+p.presentation+')':''}</option>`).join('');
+    const sel = S.products.map(p=>`<option value="${p.id}" ${String(p.id)===String(t.productId)?'selected':''}>${p.name}</option>`).join('');
     return `<div class="br-mix-ind-row" style="display:flex;gap:5px;align-items:center;margin-bottom:5px">
       <select class="br-mix-ind-pid" style="flex:1;min-width:0;background:#0d0f18;color:#f1f5f9;border:1px solid #2a3050;border-radius:7px;padding:5px;font-size:11px">${sel}</select>
       <input type="number" class="br-mix-ind-thr" value="${t.threshold||''}" min="1" placeholder="Meta" style="width:70px;background:#0d0f18;color:#f1f5f9;border:1px solid #2a3050;border-radius:7px;padding:5px;font-size:12px"/>
@@ -278,7 +278,7 @@ function openBonusModal(cid, ri) {
   }).join('');
 
   const mixPoolHtml = (r2) => (r2.mixPoolProds||[]).map(pid=>{
-    const sel = S.products.map(p=>`<option value="${p.id}" ${String(p.id)===String(pid)?'selected':''}>${p.name}${p.presentation?' ('+p.presentation+')':''}</option>`).join('');
+    const sel = S.products.map(p=>`<option value="${p.id}" ${String(p.id)===String(pid)?'selected':''}>${p.name}</option>`).join('');
     return `<div class="br-mix-pool-row" style="display:flex;gap:5px;align-items:center;margin-bottom:5px">
       <select class="br-mix-pool-pid" style="flex:1;background:#0d0f18;color:#f1f5f9;border:1px solid #2a3050;border-radius:7px;padding:5px;font-size:12px">${sel}</select>
       <button onclick="this.closest('.br-mix-pool-row').remove()" style="background:#ef444420;border:1px solid #ef4444;border-radius:6px;color:#ef4444;padding:3px 7px;font-size:12px;cursor:pointer">x</button>
@@ -286,7 +286,7 @@ function openBonusModal(cid, ri) {
   }).join('');
 
   const mixEqHtml = (r2) => (r2.mixEqProds||[]).map(ep=>{
-    const sel = S.products.map(p=>`<option value="${p.id}" ${String(p.id)===String(ep.productId)?'selected':''}>${p.name}${p.presentation?' ('+p.presentation+')':''}</option>`).join('');
+    const sel = S.products.map(p=>`<option value="${p.id}" ${String(p.id)===String(ep.productId)?'selected':''}>${p.name}</option>`).join('');
     return `<div class="br-mix-eq-row" style="display:flex;flex-direction:column;gap:4px;margin-bottom:8px;padding:5px;background:#12162a;border-radius:7px">
       <div style="display:flex;gap:5px;align-items:center">
         <select class="br-mix-eq-pid" style="flex:1;min-width:0;background:#0d0f18;color:#f1f5f9;border:1px solid #2a3050;border-radius:7px;padding:5px;font-size:11px">${sel}</select>
@@ -298,7 +298,7 @@ function openBonusModal(cid, ri) {
   }).join('');
 
   const bonusItemsHtml = (items) => (items||[]).map(bi=>{
-    const sel = S.products.map(p=>`<option value="${p.id}" ${String(p.id)===String(bi.productId)?'selected':''}>${p.name}${p.presentation ? ' ('+p.presentation+')' : ''}</option>`).join('');
+    const sel = S.products.map(p=>`<option value="${p.id}" ${String(p.id)===String(bi.productId)?'selected':''}>${p.name}</option>`).join('');
     return `<div class="br-bonus-row" style="background:#0d1f0d;border:1px solid #1a3a1a;border-radius:8px;padding:6px;margin-bottom:6px">
       <div style="display:grid;grid-template-columns:1fr 45px 70px 28px;gap:4px;align-items:center;margin-bottom:4px">
         <select class="br-bpid" style="background:#0d0f18;color:#f1f5f9;border:1px solid #2a3050;border-radius:6px;padding:4px;font-size:11px;min-width:0">${sel}</select>
@@ -408,7 +408,7 @@ function openBonusModal(cid, ri) {
 
 
 function addPoolRow() {
-  const prodOpts = S.products.map(p=>`<option value="${p.id}">${p.name}${p.presentation ? ' ('+p.presentation+')' : ''}</option>`).join('');
+  const prodOpts = S.products.map(p=>`<option value="${p.id}">${p.name}</option>`).join('');
   const div = document.createElement('div');
   div.className='br-pool-row'; div.style.cssText='display:flex;gap:5px;align-items:center;margin-bottom:5px';
   div.innerHTML=`<select class="br-ppid" style="flex:1;background:#0d0f18;color:#f1f5f9;border:1px solid #2a3050;border-radius:7px;padding:5px;font-size:12px">${prodOpts}</select>
@@ -417,7 +417,7 @@ function addPoolRow() {
 }
 
 function addBonusItemRow() {
-  const prodOpts = S.products.map(p=>`<option value="${p.id}">${p.name}${p.presentation ? ' ('+p.presentation+')' : ''}</option>`).join('');
+  const prodOpts = S.products.map(p=>`<option value="${p.id}">${p.name}</option>`).join('');
   const div = document.createElement('div');
   div.className = 'br-bonus-row';
   div.style.cssText = 'background:#0d1f0d;border:1px solid #1a3a1a;border-radius:8px;padding:6px;margin-bottom:6px';
@@ -779,7 +779,7 @@ function showBonusReport(cid) {
 
     const bonifItems = (r.bonusItems||[]).map(bi => {
       const p = S.products.find(x=>x.id===Number(bi.productId));
-      const spec = p?.presentation ? ` (${p.presentation})` : '';
+      const spec = '';
       return `${bi.qty} ${p?p.name:'—'}${spec}`;
     }).join(', ');
 
@@ -978,7 +978,7 @@ function bhrSearchProds() {
   matches.forEach(p => {
     const d = document.createElement('div');
     d.className = 'ac-opt';
-    d.innerHTML = `${p.name}${p.presentation?` <small>${p.presentation}</small>`:''}`;
+    d.innerHTML = `${p.name}`;
     d.onmousedown = () => {
       _bhrProductIds.push(p.id);
       txt.value = '';
@@ -1149,7 +1149,7 @@ function generateBonusSimpleReport(cid, fromStr, toStr, includeBonus=true, prodI
           const us = Number(p?.unitSize)||1;
           const ul = p?.unitLabel||'unidad';
           const sub = (bl.qty||0) * us * (bl.price||0);
-          const spec = p?.presentation?` (${p.presentation})`:'';
+          const spec = '';
           const _ivaTagRep = o.applyIva ? ' <span style="font-size:10px;color:#2563eb">+IVA</span>' : '';
           const comentarioBl = bl.ruleName ? `<div style="font-size:11px;color:#64748b;font-style:italic;margin-top:1px">💬 ${bl.ruleName}</div>` : '';
           return `<div>
@@ -1522,7 +1522,7 @@ function generateBonusHistoryReport(cid, fromStr, toStr) {
         // Sin precio
         const items = g.bonusOrd.bonusLines.map(bl => {
           const p = S.products.find(x=>x.id===Number(bl.productId));
-          const spec = p?.presentation?` (${p.presentation})`:'';
+          const spec = '';
           return `${bl.qty} ${p?p.name:'—'}${spec}`;
         }).join('<br>');
         bonifHtml = `<div style="margin-top:8px;padding:8px;background:#eff6ff;border:1px solid #bfdbfe;border-radius:6px">
@@ -1876,9 +1876,9 @@ function checkBonusAlert(cid, oid, onDone, extraOrd) {
   const { r, ri } = triggered[0];
 
   // Construir filas editables de bonificación
-  const prodOpts = S.products.map(p=>`<option value="${p.id}">${p.name}${p.presentation ? ' ('+p.presentation+')' : ''}</option>`).join('');
+  const prodOpts = S.products.map(p=>`<option value="${p.id}">${p.name}</option>`).join('');
   const bonusRowsHtml = (r.bonusItems||[]).map((bi,i) => {
-    const pOpts = S.products.map(p=>`<option value="${p.id}" ${p.id===Number(bi.productId)?'selected':''}>${p.name}${p.presentation ? ' ('+p.presentation+')' : ''}</option>`).join('');
+    const pOpts = S.products.map(p=>`<option value="${p.id}" ${p.id===Number(bi.productId)?'selected':''}>${p.name}</option>`).join('');
     const defaultPr = bi.price != null ? bi.price : cliPrice(cid, bi.productId, S.products.find(x=>x.id===Number(bi.productId))?.basePrice||0);
     return `<div class="ba-row" style="background:#0d1f0d;border:1px solid #1a3a1a;border-radius:8px;padding:6px;margin-bottom:6px">
       <div style="display:grid;grid-template-columns:1fr 45px 70px;gap:4px;align-items:center;margin-bottom:4px">
@@ -1960,7 +1960,7 @@ function checkBonusAlert(cid, oid, onDone, extraOrd) {
 
 // ── Trasladado desde el bloque "MODAL DE CONFIRMACIÓN" (mal etiquetado) ──
 function addPoolEqRow(pid, factor) {
-  const prodOpts = S.products.map(p=>`<option value="${p.id}" ${String(p.id)===String(pid||'')?'selected':''}>${p.name}${p.presentation?' ('+p.presentation+')':''}</option>`).join('');
+  const prodOpts = S.products.map(p=>`<option value="${p.id}" ${String(p.id)===String(pid||'')?'selected':''}>${p.name}</option>`).join('');
   const row = document.createElement('div');
   row.className = 'br-pooleq-row';
   row.style.cssText = 'display:flex;gap:5px;align-items:center;margin-bottom:5px';
@@ -1972,7 +1972,7 @@ function addPoolEqRow(pid, factor) {
 }
 
 function addMixIndRow(pid, threshold) {
-  const prodOpts = S.products.map(p=>`<option value="${p.id}" ${String(p.id)===String(pid||'')?'selected':''}>${p.name}${p.presentation?' ('+p.presentation+')':''}</option>`).join('');
+  const prodOpts = S.products.map(p=>`<option value="${p.id}" ${String(p.id)===String(pid||'')?'selected':''}>${p.name}</option>`).join('');
   const row = document.createElement('div');
   row.className = 'br-mix-ind-row';
   row.style.cssText = 'display:flex;gap:5px;align-items:center;margin-bottom:5px';
@@ -1984,7 +1984,7 @@ function addMixIndRow(pid, threshold) {
 }
 
 function addMixEqRow(pid, factor, unitLabel) {
-  const prodOpts = S.products.map(p=>`<option value="${p.id}" ${String(p.id)===String(pid||'')?'selected':''}>${p.name}${p.presentation?' ('+p.presentation+')':''}</option>`).join('');
+  const prodOpts = S.products.map(p=>`<option value="${p.id}" ${String(p.id)===String(pid||'')?'selected':''}>${p.name}</option>`).join('');
   const row = document.createElement('div');
   row.className = 'br-mix-eq-row';
   row.style.cssText = 'display:flex;flex-direction:column;gap:4px;margin-bottom:8px;padding:5px;background:#12162a;border-radius:7px';
@@ -1999,7 +1999,7 @@ function addMixEqRow(pid, factor, unitLabel) {
 }
 
 function addMixPoolRow(pid) {
-  const prodOpts = S.products.map(p=>`<option value="${p.id}" ${String(p.id)===String(pid||'')?'selected':''}>${p.name}${p.presentation?' ('+p.presentation+')':''}</option>`).join('');
+  const prodOpts = S.products.map(p=>`<option value="${p.id}" ${String(p.id)===String(pid||'')?'selected':''}>${p.name}</option>`).join('');
   const row = document.createElement('div');
   row.className = 'br-mix-pool-row';
   row.style.cssText = 'display:flex;gap:5px;align-items:center;margin-bottom:5px';
