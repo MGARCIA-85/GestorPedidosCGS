@@ -499,7 +499,9 @@ function openSpecEdit(i) {
   window._specEditOpen[i] = true;
   refreshSub(i, Number(document.getElementById('ord-cli').value));
   const sel = document.querySelector(`#sub${i} select.tag`);
-  if (sel) sel.focus();
+  // .click() (no solo .focus()) para que el desplegable nativo se abra de
+  // una vez, dentro del mismo toque que activó el selector.
+  if (sel) { sel.focus(); sel.click(); }
 }
 function closeSpecEdit(i) {
   // Pequeño delay para permitir que el "change" del select (si lo hubo) se
