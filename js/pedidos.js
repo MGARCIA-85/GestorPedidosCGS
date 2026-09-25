@@ -2408,26 +2408,11 @@ const ords = S.orders.filter(o=>!_prospectIds2.has(Number(o.clientId)) && !o.can
   const el = document.getElementById('cnt-'+st);
   if (el) el.textContent = '('+ords.filter(o=>o.status===st&&!o.routeId).length+')';
 });
-const base = _orderAsc
-  ? [...ords].filter(o => !o.routeId).sort((a,b) => { const td=ordDateTs(a)-ordDateTs(b); return td!==0?td:a.id-b.id; })
-  : [...ords].filter(o => !o.routeId).sort((a,b) => { const td=ordDateTs(b)-ordDateTs(a); return td!==0?td:b.id-a.id; });
-let filtered = _orderTab === 'all' ? base : base.filter(o => o.status === _orderTab);
-// Filtro por cliente (multi-select)
-if (_selectedClients && _selectedClients.length) { const _expNames2 = expandSelectedClientNames(_selectedClients); filtered = filtered.filter(o => _expNames2.includes(o.clientName)); }
-// Filtro por fecha
-const fFrom = document.getElementById('f-date-from')?.value;
-const fTo   = document.getElementById('f-date-to')?.value;
-if (fFrom || fTo) {
-  filtered = filtered.filter(o => {
-    const parts = (o.date||'').split('/');
-    if (parts.length < 3) return true;
-    const d = parseInt(parts[0]), m = parseInt(parts[1]), y = parseInt(parts[2]);
-    const dateStr = `${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
-    if (fFrom && dateStr < fFrom) return false;
-    if (fTo   && dateStr > fTo)   return false;
-    return true;
-  });
-}
+// El resto del filtrado (tab, cliente, fecha, producto) vive en una sola
+// función compartida con los reportes, para no tener que mantener la
+// misma lógica en dos lugares (y que un filtro nuevo no se quede sin
+// aplicar en uno de los dos).
+let filtered = getReportFiltered();
 document.getElementById('lt').textContent = `Pedidos (${filtered.length})`;
 const body = document.getElementById('lst-body');
 if (!filtered.length) { body.innerHTML='<div style="text-align:center;color:#64748b;padding:40px">Sin pedidos sin ruta.</div>'; return; }
