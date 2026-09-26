@@ -716,11 +716,15 @@ const p  = S.products.find(x => x.id===Number(it.pid)); if (!p) { el.innerHTML='
 ensureProductSpecs(p);
 const activeSpecs = p.specs.filter(s=>s.active);
 const canPickSpec = activeSpecs.length > 1;
-const trueChosen = activeSpecs.find(s => String(s.id)===String(it.specId));
+// Busca la especificación asignada entre TODAS (activa o no) — así, al
+// duplicar un pedido antiguo cuya especificación quedó inactiva, se sigue
+// mostrando la que realmente se vendió en vez de sustituirla por la única
+// activa. Solo se pide elegir si nunca se asignó ninguna.
+const assignedSpec = p.specs.find(s => String(s.id)===String(it.specId));
 const fallbackSpec = activeSpecs[0] || p.specs[0];
-const chosenSpec = trueChosen || (canPickSpec ? null : fallbackSpec);
+const chosenSpec = assignedSpec || (canPickSpec ? null : fallbackSpec);
 const specLabel = chosenSpec ? chosenSpec.label : (canPickSpec ? '' : (p.presentation||''));
-const needsSpecChoice = canPickSpec && !trueChosen;
+const needsSpecChoice = canPickSpec && !assignedSpec;
 const listPrice = cliPrice(cid, p.id, p.basePrice);
 const prRaw = (it && it.price!=null)? it.price : listPrice;
 // Mostrar precio de lista como referencia en el label con color
@@ -793,9 +797,33 @@ renderSapCalc();
 // la unidad de venta normal si no. Cuando el botón no está activo, nada
 // de esto se ejecuta y el resto del formulario funciona exactamente igual
 // que siempre.
+// Activa (solo para este pedido) las especificaciones inactivas asignadas
+// a alguna línea o bonificación, y reintenta guardar el pedido.
+function reactivateSpecsAndResubmit(isQuote) {
+  const valid = ordItems.filter(it => it.pid && Number(it.qty) > 0);
+  valid.forEach(it => {
+    const p = S.products.find(x=>x.id===Number(it.pid));
+    if (!p) return;
+    ensureProductSpecs(p);
+    const spec = p.specs.find(s=>String(s.id)===String(it.specId));
+    if (spec) spec.active = true;
+  });
+  (ordBonusLines||[]).forEach(bl => {
+    const p = S.products.find(x=>x.id===Number(bl.productId));
+    if (!p) return;
+    ensureProductSpecs(p);
+    const spec = p.specs.find(s=>String(s.id)===String(bl.specId));
+    if (spec) spec.active = true;
+  });
+  save();
+  window._specReactivateConfirmed = true;
+  submitOrder(isQuote);
+}
+
 function resetSapCalcUI() {
   window._sapCalcOpen = false;
   window._sapConfirmed = false;
+  window._specReactivateConfirmed = false;
   const panel = document.getElementById('ord-sap-panel');
   const roundRow = document.getElementById('ord-sap-round-row');
   const btn = document.getElementById('btn-sap-calc');
@@ -983,14 +1011,16 @@ if (editingOid === null) {
 const valid = ordItems.filter(it => it.pid && Number(it.qty) > 0);
 if (!valid.length && !ordBonusLines.length) return alert('Agrega al menos un producto o una bonificación.');
 
-// Validar que los productos con más de una especificación activa tengan una elegida
+// Validar que los productos con más de una especificación activa tengan una
+// asignada (activa o no — solo se exige elegir si nunca se asignó ninguna)
 {
   const missingSpec = valid.filter(it => {
     const p = S.products.find(x=>x.id===Number(it.pid));
     if (!p) return false;
     ensureProductSpecs(p);
     const active = p.specs.filter(s=>s.active);
-    return active.length > 1 && !active.some(s=>String(s.id)===String(it.specId));
+    const assigned = p.specs.find(s=>String(s.id)===String(it.specId));
+    return active.length > 1 && !assigned;
   });
   if (missingSpec.length) {
     const nombres = missingSpec.map(it => { const p=S.products.find(x=>x.id===Number(it.pid)); return p?p.name:''; }).join(', ');
@@ -1002,13 +1032,54 @@ if (!valid.length && !ordBonusLines.length) return alert('Agrega al menos un pro
     if (!p) return false;
     ensureProductSpecs(p);
     const active = p.specs.filter(s=>s.active);
-    return active.length > 1 && !active.some(s=>String(s.id)===String(bl.specId));
+    const assigned = p.specs.find(s=>String(s.id)===String(bl.specId));
+    return active.length > 1 && !assigned;
   });
   if (missingBonusSpec.length) {
     const nombres = missingBonusSpec.map(bl => { const p=S.products.find(x=>x.id===Number(bl.productId)); return p?p.name:''; }).join(', ');
     toast('Selecciona la especificación de la bonificación: '+nombres, '#f59e0b');
     return;
   }
+  // Si la especificación asignada (venta o bonificación) existe pero está
+  // inactiva, avisar antes de guardar en vez de bloquear o perderla en
+  // silencio — se puede activar solo para este pedido y continuar.
+  if (!window._specReactivateConfirmed) {
+    const inactiveList = [];
+    valid.forEach(it => {
+      const p = S.products.find(x=>x.id===Number(it.pid));
+      if (!p) return;
+      ensureProductSpecs(p);
+      const spec = p.specs.find(s=>String(s.id)===String(it.specId));
+      if (spec && !spec.active) inactiveList.push({ p, spec });
+    });
+    (ordBonusLines||[]).forEach(bl => {
+      const p = S.products.find(x=>x.id===Number(bl.productId));
+      if (!p) return;
+      ensureProductSpecs(p);
+      const spec = p.specs.find(s=>String(s.id)===String(bl.specId));
+      if (spec && !spec.active) inactiveList.push({ p, spec });
+    });
+    if (inactiveList.length) {
+      const itemsHtmlList = inactiveList.map(x => `<div style="font-size:12px;color:#f1f5f9;margin-bottom:4px">• <strong>${x.p.name}</strong> — ${x.spec.label}</div>`).join('');
+      const overlay = document.createElement('div');
+      overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
+      overlay.innerHTML = `<div style="background:#1e2236;border:1px solid #f59e0b;border-radius:14px;padding:20px;max-width:360px;width:100%">
+        <div style="font-size:15px;font-weight:800;color:#f59e0b;margin-bottom:8px">⚠️ Especificación inactiva</div>
+        <div style="font-size:12px;color:#94a3b8;margin-bottom:10px">Este pedido usa una especificación que ya no está activa en el producto:</div>
+        ${itemsHtmlList}
+        <div style="font-size:12px;color:#94a3b8;margin:10px 0 0">¿Deseas activarla para poder registrar/guardar este pedido?</div>
+        <div style="display:flex;flex-direction:column;gap:8px;margin-top:12px">
+          <button onclick="this.closest('div[style*=fixed]').remove();reactivateSpecsAndResubmit(${isQuote})"
+            style="padding:10px;background:#f59e0b;border:none;border-radius:8px;color:#111;font-weight:800;font-size:14px;cursor:pointer">✅ Activar para este pedido</button>
+          <button onclick="this.closest('div[style*=fixed]').remove()"
+            style="padding:10px;background:#2a3050;border:none;border-radius:8px;color:#94a3b8;font-weight:700;font-size:14px;cursor:pointer">Cancelar</button>
+        </div>
+      </div>`;
+      document.body.appendChild(overlay);
+      return;
+    }
+  }
+  window._specReactivateConfirmed = false;
 }
 
 const delivery = document.getElementById('ord-delivery')?.value.trim() || '';
