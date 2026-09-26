@@ -2215,7 +2215,7 @@ function shareOrderReportSel() {
     if (sameCmts) {
       // Caso 1: mismo cliente, comentarios idénticos — comentarios una sola vez al inicio
       const sharedCmts = getCmts(filtered[0]);
-      const cmtBlock = sharedCmts.length ? sharedCmts.join('\n') + '\n\n' : '';
+      const cmtBlock = sharedCmts.length ? `NOTAS:\n` + sharedCmts.map(c=>`• ${c}`).join('\n') + '\n\n' : '';
       // Dirección: si todos tienen la misma va arriba, si no va en cada pedido
       const firstDelivery = filtered[0].delivery || '';
       const sameDelivery = filtered.every(o => (o.delivery || '') === firstDelivery);
@@ -2227,7 +2227,7 @@ function shareOrderReportSel() {
 
       const pedidoLines = filtered.map((o, i) => {
         const cotLine = (!sameQuote && o.quote) ? `Cot. ${o.quote}\n` : '';
-        const ocLine = o.oc ? `Orden ${o.oc}\n` : '';
+        const ocLine = o.oc ? `OC ${o.oc}\n` : '';
         const qNoteLine = (!sameQNote && o.quoteNote) ? `Fecha de entrega: ${fmtEntrega(o.quoteNote)}\n` : '';
         const deliveryLine = (!sameDelivery && o.delivery) ? `Entrega: ${o.delivery}\n` : '';
         const prodLines = getProdLines(o);
@@ -2243,7 +2243,7 @@ function shareOrderReportSel() {
       const commonCmts = allCmtSets[0].filter(c =>
         allCmtSets.every(cmts => cmts.includes(c))
       );
-      const commonBlock = commonCmts.length ? commonCmts.join('\n') + '\n\n' : '';
+      const commonBlock = commonCmts.length ? `NOTAS:\n` + commonCmts.map(c=>`• ${c}`).join('\n') + '\n\n' : '';
       // Dirección: si todos tienen la misma va arriba, si no va en cada pedido
       const firstDelivery2 = filtered[0].delivery || '';
       const sameDelivery2 = filtered.every(o => (o.delivery || '') === firstDelivery2);
@@ -2255,11 +2255,11 @@ function shareOrderReportSel() {
 
       const pedidoLines = filtered.map((o, i) => {
         const cotLine = (!sameQuote && o.quote) ? `Cot. ${o.quote}\n` : '';
-        const ocLine = o.oc ? `Orden ${o.oc}\n` : '';
+        const ocLine = o.oc ? `OC ${o.oc}\n` : '';
         const qNoteLine = (!sameQNote2 && o.quoteNote) ? `Fecha de entrega: ${fmtEntrega(o.quoteNote)}\n` : '';
         const deliveryLine = (!sameDelivery2 && o.delivery) ? `Entrega: ${o.delivery}\n` : '';
         const uniqueCmts = getCmts(o).filter(c => !commonCmts.includes(c));
-        const cmtBlock = uniqueCmts.length ? uniqueCmts.join('\n') + '\n\n' : '';
+        const cmtBlock = uniqueCmts.length ? `NOTAS:\n` + uniqueCmts.map(c=>`• ${c}`).join('\n') + '\n\n' : '';
         const prodLines = getProdLines(o);
         const bonusBlock = getBonusBlock(o);
         return `Pedido #${i+1}\n${cotLine}${ocLine}${qNoteLine}${deliveryLine}${cmtBlock}${prodLines}\nTOTAL: ${Q(getTotal(o))}${bonusBlock}`;
@@ -2276,10 +2276,10 @@ function shareOrderReportSel() {
       const cliObj3 = S.clients.find(c => c.id === o.clientId);
       const idLine = cliObj3 && cliObj3.clientCode ? `ID: ${cliObj3.clientCode} - ${o.clientName}` : `${o.clientName}`;
       const cotLine = o.quote ? `Cot: ${o.quote}` : '';
-      const ocLine  = o.oc    ? `Orden ${o.oc}` : '';
+      const ocLine  = o.oc    ? `OC ${o.oc}` : '';
       const qNoteLine3 = o.quoteNote ? `Fecha de entrega: ${fmtEntrega(o.quoteNote)}` : '';
       const deliveryLine = o.delivery ? `Entrega: ${o.delivery}` : '';
-      const cmtLines = cmts.map(c => `${c}`).join('\n');
+      const cmtLines = cmts.length ? `NOTAS:\n` + cmts.map(c => `• ${c}`).join('\n') : '';
       const prodLines = getProdLines(o);
       const bonusBlock = getBonusBlock(o);
       let t = [`Pedido #${i+1}`, idLine, cotLine, ocLine, qNoteLine3, deliveryLine].filter(Boolean).join('\n');
@@ -2411,8 +2411,8 @@ function generateOrderReport(selIds) {
     const sapCalc2 = o.sapMode ? getSapCalcForOrder(o) : null;
     const cmts = (o.comments&&o.comments.length?o.comments:(o.note?[o.note]:[])).filter(c=>c&&c.trim());
     const cotLine = o.quote ? `Cot: ${o.quote}` : '';
-    const ocLine  = o.oc    ? `Orden ${o.oc}` : '';
-    const cmtLines = cmts.map(c => `•${c}`).join('\n');
+    const ocLine  = o.oc    ? `OC ${o.oc}` : '';
+    const cmtLines = cmts.length ? `NOTAS:\n` + cmts.map(c => `• ${c}`).join('\n') : '';
     const prodLines = sapCalc2 ? sapCalc2.items.map(r => {
       const spec = r.specLabel ? ` (${r.specLabel})` : '';
       return '》'+r.qty+' '+r.name+spec+'\nPrecio: '+Q(r.sapPriceNoIva)+'/'+r.sapUnitLabel+' + IVA';
@@ -3309,11 +3309,11 @@ const bonusBlock = bonusLines ? `》BONIFICACIÓN《\n${bonusLines}` : '';
 const tot = orderTotal(ord.items, ord.clientId);
 const totalFinal = sapCalc ? sapCalc.totalConIva : (ord.applyIva ? tot*1.12 : tot);
 
-// Comentarios con bullet •
+// Comentarios con etiqueta "NOTAS:" y bullet "• "
 const cmts = (ord.comments && ord.comments.length ? ord.comments : (ord.note ? [ord.note] : [])).filter(c=>c&&c.trim());
-const comentariosTexto = cmts.map(c => `•${c}`).join('\n');
+const comentariosTexto = cmts.length ? `NOTAS:\n` + cmts.map(c => `• ${c}`).join('\n') : '';
 
-const ocLine = ord.oc ? `Orden ${ord.oc}` : '';
+const ocLine = ord.oc ? `OC ${ord.oc}` : '';
 const qNoteLine = ord.quoteNote ? `Fecha de entrega: ${fmtEntrega(ord.quoteNote)}` : '';
 const deliveryLine = ord.delivery ? `Entrega: ${ord.delivery}` : '';
 
@@ -3365,8 +3365,11 @@ t += `\n`;
 t += `Cliente: *${ord.clientName}*\n`;
 
 // Comentarios normales
-const cmts = ord.comments && ord.comments.length ? ord.comments : (ord.note ? [ord.note] : []);
-cmts.filter(Boolean).forEach(c => { t += `- ${c}\n`; });
+const cmts = (ord.comments && ord.comments.length ? ord.comments : (ord.note ? [ord.note] : [])).filter(Boolean);
+if (cmts.length) {
+  t += `NOTAS:\n`;
+  cmts.forEach(c => { t += `• ${c}\n`; });
+}
 
 // Productos
 t += '\n';
