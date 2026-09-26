@@ -797,25 +797,10 @@ renderSapCalc();
 // la unidad de venta normal si no. Cuando el botón no está activo, nada
 // de esto se ejecuta y el resto del formulario funciona exactamente igual
 // que siempre.
-// Activa (solo para este pedido) las especificaciones inactivas asignadas
-// a alguna línea o bonificación, y reintenta guardar el pedido.
+// Permite guardar este pedido con la especificación inactiva asignada,
+// SIN reactivarla en el producto (eso solo se hace desde la ficha del
+// producto). La excepción aplica únicamente a este pedido.
 function reactivateSpecsAndResubmit(isQuote) {
-  const valid = ordItems.filter(it => it.pid && Number(it.qty) > 0);
-  valid.forEach(it => {
-    const p = S.products.find(x=>x.id===Number(it.pid));
-    if (!p) return;
-    ensureProductSpecs(p);
-    const spec = p.specs.find(s=>String(s.id)===String(it.specId));
-    if (spec) spec.active = true;
-  });
-  (ordBonusLines||[]).forEach(bl => {
-    const p = S.products.find(x=>x.id===Number(bl.productId));
-    if (!p) return;
-    ensureProductSpecs(p);
-    const spec = p.specs.find(s=>String(s.id)===String(bl.specId));
-    if (spec) spec.active = true;
-  });
-  save();
   window._specReactivateConfirmed = true;
   submitOrder(isQuote);
 }
@@ -824,6 +809,7 @@ function resetSapCalcUI() {
   window._sapCalcOpen = false;
   window._sapConfirmed = false;
   window._specReactivateConfirmed = false;
+  window._restrictedConfirmedIds = [];
   const panel = document.getElementById('ord-sap-panel');
   const roundRow = document.getElementById('ord-sap-round-row');
   const btn = document.getElementById('btn-sap-calc');
@@ -1067,7 +1053,7 @@ if (!valid.length && !ordBonusLines.length) return alert('Agrega al menos un pro
         <div style="font-size:15px;font-weight:800;color:#f59e0b;margin-bottom:8px">⚠️ Especificación inactiva</div>
         <div style="font-size:12px;color:#94a3b8;margin-bottom:10px">Este pedido usa una especificación que ya no está activa en el producto:</div>
         ${itemsHtmlList}
-        <div style="font-size:12px;color:#94a3b8;margin:10px 0 0">¿Deseas activarla para poder registrar/guardar este pedido?</div>
+        <div style="font-size:12px;color:#94a3b8;margin:10px 0 0">¿Deseas guardar este pedido de todas formas? (no reactiva la especificación en el producto — para eso, hazlo desde la ficha del producto)</div>
         <div style="display:flex;flex-direction:column;gap:8px;margin-top:12px">
           <button onclick="this.closest('div[style*=fixed]').remove();reactivateSpecsAndResubmit(${isQuote})"
             style="padding:10px;background:#f59e0b;border:none;border-radius:8px;color:#111;font-weight:800;font-size:14px;cursor:pointer">✅ Activar para este pedido</button>
@@ -1094,7 +1080,7 @@ const cliRest = S.clients.find(x=>x.id===cid);
   valid.forEach((it) => {
     const p = S.products.find(x=>x.id===Number(it.pid));
     const fam = p && p.family ? p.family.trim() : '';
-    if (fam && (S.restrictedFamilies||[]).includes(fam) && !cliAuthProdsVal.includes(p.id)) {
+    if (fam && (S.restrictedFamilies||[]).includes(fam) && !cliAuthProdsVal.includes(p.id) && !(window._restrictedConfirmedIds||[]).includes(p.id)) {
       restrictedItems.push({idx: ordItems.indexOf(it), p, fam});
     }
   });
@@ -1107,9 +1093,10 @@ const cliRest = S.clients.find(x=>x.id===cid);
       <div style="font-size:15px;font-weight:800;color:#ef4444;margin-bottom:8px">🔒 Producto restringido</div>
       <div style="font-size:12px;color:#94a3b8;margin-bottom:10px">${cliRest?cliRest.name:'Este cliente'} no tiene permiso para comprar:</div>
       ${listHtml}
+      <div style="font-size:11px;color:#64748b;margin-top:8px">Esto solo autoriza este pedido — no le da permiso permanente al cliente. Para eso, hazlo desde la ficha del cliente.</div>
       <div style="display:flex;flex-direction:column;gap:8px;margin-top:16px">
-        <button onclick="const c=S.clients.find(x=>x.id===${cid});if(c){c.authorizedProducts=[...(c.authorizedProducts||[]),...[${restPids.join(',')}]];save();}this.closest('div[style*=fixed]').remove();submitOrder(${isQuote})"
-          style="padding:10px;background:#10b981;border:none;border-radius:8px;color:#fff;font-weight:700;font-size:14px;cursor:pointer">✅ Dar permiso a este cliente y continuar</button>
+        <button onclick="window._restrictedConfirmedIds=[...(window._restrictedConfirmedIds||[]),${restPids.join(',')}];this.closest('div[style*=fixed]').remove();submitOrder(${isQuote})"
+          style="padding:10px;background:#10b981;border:none;border-radius:8px;color:#fff;font-weight:700;font-size:14px;cursor:pointer">✅ Otorgar permiso para este pedido</button>
         <button onclick="[${restrictedItems.map(r=>r.idx).join(',')}].sort((a,b)=>b-a).forEach(i=>ordItems.splice(i,1));renderItems();this.closest('div[style*=fixed]').remove();toast('🗑 Producto(s) restringido(s) quitado(s) del pedido','#f59e0b')"
           style="padding:10px;background:transparent;border:1px solid #ef4444;border-radius:8px;color:#ef4444;font-weight:700;font-size:14px;cursor:pointer">🗑 Quitar producto(s) y continuar editando</button>
         <button onclick="this.closest('div[style*=fixed]').remove()"
