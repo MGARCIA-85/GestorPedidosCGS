@@ -737,10 +737,14 @@ function openSalesforceModal(oid) {
 function _sfFmtPrice(n, mode) {
   if (mode === 'floor') return (Math.floor(n*100)/100).toFixed(2);
   if (mode === 'round') return (Math.round(n*100)/100).toFixed(2);
-  return String(n);
+  // Sin redondeo: precisión completa, pero limpiando el ruido de punto
+  // flotante propio de cómo las computadoras guardan decimales en binario
+  // (ej. 1.31×18 puede dar 23.580000000000002 en vez de 23.58 exacto).
+  return String(Math.round(n * 1e8) / 1e8);
 }
 function _sfFmtKilos(n) {
-  return (Math.abs(n - Math.round(n)) < 0.005) ? String(Math.round(n)) : String(n);
+  const cleaned = Math.round(n * 1e6) / 1e6;
+  return (Math.abs(cleaned - Math.round(cleaned)) < 0.005) ? String(Math.round(cleaned)) : String(cleaned);
 }
 
 function renderSfTable() {
