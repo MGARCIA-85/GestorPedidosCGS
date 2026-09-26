@@ -767,7 +767,7 @@ function renderSfTable() {
     const priceRegular = it.customPrice != null ? it.customPrice : cliPrice(o.clientId, it.productId, p.basePrice||0);
     const lineTotalWithIva = priceRegular * totalUnits;
     const priceKiloNoIva = (lineTotalWithIva / kilos) / 1.12;
-    const specLbl = it.specLabel || (spec ? spec.label : '');
+    const specLbl = itemSpecLabel(it, p);
     return { name: p.name, specLbl, kilos, priceRegular, priceKiloNoIva, unitLabel: p.unitLabel||'unidad' };
   }).filter(Boolean);
 
