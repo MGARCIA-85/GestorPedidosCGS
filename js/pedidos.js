@@ -2685,6 +2685,7 @@ function setOrderTab(tab) {
 
 function renderList() {
 
+migrateFreezeOrderPrices();
 const _prospectIds2 = new Set(S.clients.filter(c=>c.isProspect).map(c=>c.id));
 const ords = S.orders.filter(o=>!_prospectIds2.has(Number(o.clientId)) && !o.cancelled);
 // Poblar clientes ya no es necesario con autocompletado

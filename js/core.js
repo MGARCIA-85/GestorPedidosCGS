@@ -406,6 +406,35 @@ function orderTotal(items, cid) {
 return items.reduce((s, it) => s + lineTotal(cid, it.productId||it.pid, it.qty, it.customPrice != null ? it.customPrice : null, it.specId, it.specUnitSize), 0);
 }
 
+// Congela el precio de cualquier pedido guardado que aún no lo tenga
+// (pedidos de antes de que el precio quedara "congelado" por línea).
+// Sin esto, esas líneas leían el precio de lista EN VIVO, así que
+// cambiar la lista de precios (por ejemplo al deslizar en el formulario
+// de pedidos) alteraba el total de pedidos ya guardados. Se ejecuta una
+// sola vez por sesión y no hace nada si ya no queda ninguno pendiente.
+function migrateFreezeOrderPrices() {
+  if (!S.orders || window._freezePricesDone) return;
+  window._freezePricesDone = true;
+  let changed = false;
+  S.orders.forEach(o => {
+    (o.items||[]).forEach(it => {
+      if (it.customPrice == null) {
+        const p = S.products.find(x=>x.id===Number(it.productId||it.pid));
+        it.customPrice = cliPrice(o.clientId, it.productId||it.pid, p?.basePrice||0);
+        changed = true;
+      }
+    });
+    (o.bonusLines||[]).forEach(bl => {
+      if (bl.price == null) {
+        const p = S.products.find(x=>x.id===Number(bl.productId));
+        bl.price = cliPrice(o.clientId, bl.productId, p?.basePrice||0);
+        changed = true;
+      }
+    });
+  });
+  if (changed) save();
+}
+
 // Unidades por especificación a usar para mostrar una línea de pedido: la
 // que quedó "congelada" en el pedido (it.specUnitSize); si no la tiene
 // (pedidos de antes de esto), la de la especificación elegida en vivo; si

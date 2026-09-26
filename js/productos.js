@@ -180,11 +180,13 @@ ${(S.familyList||[]).map(f=>`<option value="${f}" ${p.family===f?'selected':''}>
 <input class="inp" id="epul-${id}" value="${p.unitLabel||'unidad'}"/>
 <label class="lbl">Precio por unidad (Q)</label>
 <input class="inp" id="eppr-${id}" type="number" step="0.01" value="${p.basePrice}"/>
-<label class="lbl">Especificaciones <span style="color:#64748b;font-weight:400">(peso y unidades por variante — marca cuáles están activas)</span></label>
+<label class="lbl">Especificaciones</label>
 <div style="display:flex;gap:6px;padding:0 8px;margin-bottom:4px">
   <span style="flex:2;min-width:110px;font-size:10px;color:#64748b;font-weight:700">ESPECIFICACIÓN</span>
   <span style="flex:1;min-width:75px;font-size:10px;color:#64748b;font-weight:700">PESO KG</span>
   <span style="flex:1;min-width:80px;font-size:10px;color:#64748b;font-weight:700">UDS. X ESPECIF.</span>
+  <span style="width:64px;flex-shrink:0"></span>
+  <span style="width:26px;flex-shrink:0"></span>
 </div>
 <div id="epspecs-${id}"></div>
 <button type="button" onclick="addProdSpecRow(${id})" style="width:100%;padding:8px;background:transparent;border:1px dashed #3b82f6;border-radius:6px;color:#60a5fa;font-size:12px;cursor:pointer;margin-bottom:12px">+ Agregar especificación</button>
