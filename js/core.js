@@ -764,7 +764,7 @@ function renderSfTable() {
     const lineTotalWithIva = priceRegular * totalUnits;
     const priceKiloNoIva = (lineTotalWithIva / kilos) / 1.12;
     const specLbl = it.specLabel || (spec ? spec.label : '');
-    return { name: p.name + (specLbl?' ('+specLbl+')':''), kilos, priceRegular, priceKiloNoIva, unitLabel: p.unitLabel||'unidad' };
+    return { name: p.name, specLbl, kilos, priceRegular, priceKiloNoIva, unitLabel: p.unitLabel||'unidad' };
   }).filter(Boolean);
 
   tbody.innerHTML = rows.map(r => {
@@ -772,7 +772,7 @@ function renderSfTable() {
     const priceStr = _sfFmtPrice(r.priceKiloNoIva, mode);
     return `<tr style="border-bottom:1px solid #1e2640">
     <td onclick="copySfValue('${kilosStr}')" style="padding:6px 4px;color:#f1f5f9;cursor:pointer" title="Toca para copiar">${kilosStr}</td>
-    <td style="padding:6px 4px;color:#f1f5f9">${r.name}</td>
+    <td style="padding:6px 4px;color:#f1f5f9">${r.name}${r.specLbl?`<div style="margin-top:2px"><span style="font-size:9px;color:#94a3b8;background:#1e2333;border:1px solid #334155;border-radius:4px;padding:1px 6px">${r.specLbl}</span></div>`:''}</td>
     <td style="padding:6px 4px;text-align:right;color:#94a3b8;white-space:nowrap">${Q(r.priceRegular)}/${r.unitLabel}</td>
     <td onclick="copySfValue('${priceStr}')" style="padding:6px 4px;text-align:right;color:#f1f5f9;cursor:pointer" title="Toca para copiar">${priceStr}</td>
   </tr>`;
@@ -808,4 +808,11 @@ function saveSfQuote() {
   if (typeof renderList === 'function' && document.getElementById('lst-body')) renderList();
   if (typeof renderClients === 'function' && document.getElementById('cli-list')) renderClients();
   if (typeof renderRoutes === 'function' && document.getElementById('routes-list')) renderRoutes();
+}
+
+// Etiqueta de especificación en su propia línea, debajo del nombre del
+// producto (usada en las tarjetas de pedido y en el modal Salesforce).
+// Devuelve '' si no hay especificación que mostrar.
+function specTagLineHtml(label) {
+  return label ? `<div style="font-size:10px;color:#94a3b8;margin-top:1px"><span style="background:#1e2333;border:1px solid #334155;border-radius:4px;padding:1px 6px">${label}</span></div>` : '';
 }

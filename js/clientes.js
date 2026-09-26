@@ -816,10 +816,12 @@ ${(()=>{
     const disp = sapCalc ? sapCalc.totalConIva : (o.applyIva?tot*1.12:tot);
     const sCls = o.cancelled?'#ef4444':isOrderBlocked(o)?'#a855f7':o.status==='Concluido'?'#4ade80':o.status==='Confirmado'?'#60a5fa':'#f1f5f9';
     const itemsHtml = sapCalc ? sapCalc.items.map(r=>{
-      const spec = r.specLabel ? ` (${r.specLabel})` : '';
-      return `<div style="display:flex;justify-content:space-between;align-items:baseline;gap:4px;font-size:11px;padding:3px 0;border-bottom:1px solid #1e2640">
-        <span style="color:#f1f5f9;font-weight:600;flex:1;min-width:0">${r.qty} ${r.name}${spec} × ${Q(r.sapPriceNoIva)}/${r.sapUnitLabel} <span style="color:#facc15;font-size:10px">+IVA</span></span>
-        <span style="color:#f1f5f9;font-weight:700;flex-shrink:0">${Q(r.sapLineTotalWithIva)}</span>
+      return `<div style="padding:3px 0;border-bottom:1px solid #1e2640">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;gap:4px;font-size:11px">
+          <span style="color:#f1f5f9;font-weight:600;flex:1;min-width:0">${r.qty} ${r.name} × ${Q(r.sapPriceNoIva)}/${r.sapUnitLabel} <span style="color:#facc15;font-size:10px">+IVA</span></span>
+          <span style="color:#f1f5f9;font-weight:700;flex-shrink:0">${Q(r.sapLineTotalWithIva)}</span>
+        </div>
+        ${specTagLineHtml(r.specLabel)}
       </div>`;
     }).join('') : o.items.map(it=>{
       const p = S.products.find(x=>x.id===it.productId);
@@ -828,11 +830,13 @@ ${(()=>{
       const ul = p.unitLabel||'unidad';
       const us = itemUnitSizeFor(it, p);
       const sub = pr*it.qty*us;
-      const spec = itemSpecLabel(it,p) ? ` (${itemSpecLabel(it,p)})` : '';
       const iva = o.applyIva?` <span style="color:#facc15;font-size:10px">+IVA</span>`:'';
-      return `<div style="display:flex;justify-content:space-between;align-items:baseline;gap:4px;font-size:11px;padding:3px 0;border-bottom:1px solid #1e2640">
-        <span style="color:#f1f5f9;font-weight:600;flex:1;min-width:0">${it.qty} ${p.name}${spec} × ${Q(pr)}/${ul}${iva}</span>
-        <span style="color:#f1f5f9;font-weight:700;flex-shrink:0">${Q(sub)}</span>
+      return `<div style="padding:3px 0;border-bottom:1px solid #1e2640">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;gap:4px;font-size:11px">
+          <span style="color:#f1f5f9;font-weight:600;flex:1;min-width:0">${it.qty} ${p.name} × ${Q(pr)}/${ul}${iva}</span>
+          <span style="color:#f1f5f9;font-weight:700;flex-shrink:0">${Q(sub)}</span>
+        </div>
+        ${specTagLineHtml(itemSpecLabel(it,p))}
       </div>`;
     }).filter(Boolean).join('');
     const cotBtn = `<button onclick="openQuoteFromCli(${o.id})" style="flex:1;padding:5px 0;background:transparent;border:1px solid #3b82f6;border-radius:6px;color:#60a5fa;font-size:11px;cursor:pointer">📄 Cot.</button>`;

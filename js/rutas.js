@@ -188,12 +188,12 @@ function renderRoutes() {
       }).join(' ');
       const ordOpen = window._ordOpen && window._ordOpen[o.id];
       const itemsHtml = sapCalc ? sapCalc.items.map(r => {
-        const specText = r.specLabel ? ` <span style="color:#64748b;font-weight:400;font-size:11px">(${r.specLabel})</span>` : '';
         return `<div style="font-size:12px;padding:5px 0;border-bottom:1px solid #1e2640">
           <div style="display:flex;justify-content:space-between;align-items:baseline;gap:6px">
-            <span style="color:#f1f5f9;font-weight:600;flex:1;min-width:0">${r.qty} ${r.name}${specText} × ${Q(r.sapPriceNoIva)}/${r.sapUnitLabel} <span style="color:#facc15;font-size:10px">+IVA</span></span>
+            <span style="color:#f1f5f9;font-weight:600;flex:1;min-width:0">${r.qty} ${r.name} × ${Q(r.sapPriceNoIva)}/${r.sapUnitLabel} <span style="color:#facc15;font-size:10px">+IVA</span></span>
             <span style="color:#f1f5f9;font-weight:700;flex-shrink:0">${Q(r.sapLineTotalWithIva)}</span>
           </div>
+          ${specTagLineHtml(r.specLabel)}
         </div>`;
       }).join('') : o.items.map(it => {
         const p   = S.products.find(x => x.id === (it.productId || Number(it.pid)));
@@ -203,12 +203,12 @@ function renderRoutes() {
         const us  = itemUnitSizeFor(it, p);
         const sub = pr * it.qty * us;
         const ivaText = o.applyIva ? ' <span style="color:#facc15;font-size:10px">+IVA</span>' : '';
-        const specText = pres ? ` <span style="color:#64748b;font-weight:400;font-size:11px">(${pres})</span>` : '';
         return `<div style="font-size:12px;padding:5px 0;border-bottom:1px solid #1e2640">
           <div style="display:flex;justify-content:space-between;align-items:baseline;gap:6px">
-            <span style="color:#f1f5f9;font-weight:600;flex:1;min-width:0">${it.qty} ${p?p.name:'—'}${specText} × ${Q(pr)}/${ul}${ivaText}</span>
+            <span style="color:#f1f5f9;font-weight:600;flex:1;min-width:0">${it.qty} ${p?p.name:'—'} × ${Q(pr)}/${ul}${ivaText}</span>
             <span style="color:#f1f5f9;font-weight:700;flex-shrink:0">${Q(sub)}</span>
           </div>
+          ${specTagLineHtml(pres)}
         </div>`;
       }).join('');
 

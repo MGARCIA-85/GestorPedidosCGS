@@ -2797,10 +2797,12 @@ filtered.forEach(o => {
 const tot   = orderTotal(o.items, o.clientId);
 const sapCalc = o.sapMode ? getSapCalcForOrder(o) : null;
 const lines = sapCalc ? sapCalc.items.map(r => {
-const nombre = `${r.name}${r.specLabel?` (${r.specLabel})`:''}`;
-return `<div style="display:flex;justify-content:space-between;align-items:baseline;gap:4px;font-size:12px;padding:3px 0;border-bottom:1px solid #1e2640">
-  <span style="color:#f1f5f9;font-weight:600;flex:1;min-width:0">${r.qty} ${nombre} × ${Q(r.sapPriceNoIva)}/${r.sapUnitLabel} <span style="font-size:9px;color:#facc15">+IVA</span></span>
+return `<div style="padding:3px 0;border-bottom:1px solid #1e2640">
+<div style="display:flex;justify-content:space-between;align-items:baseline;gap:4px;font-size:12px">
+  <span style="color:#f1f5f9;font-weight:600;flex:1;min-width:0">${r.qty} ${r.name} × ${Q(r.sapPriceNoIva)}/${r.sapUnitLabel} <span style="font-size:9px;color:#facc15">+IVA</span></span>
   <span style="color:#f1f5f9;font-weight:700;flex-shrink:0">${Q(r.sapLineTotalWithIva)}</span>
+</div>
+${specTagLineHtml(r.specLabel)}
 </div>`;
 }).join('') : o.items.map(it => {
 const p      = S.products.find(x => x.id===it.productId);
@@ -2810,11 +2812,13 @@ const ul     = p?.unitLabel||'unidad';
 const sub    = pr * it.qty * us;
 const lineDisplay = o.applyIva ? Q(sub*1.12) : Q(sub);
 const ivaLabel = o.applyIva ? ` <span style="font-size:9px;color:#facc15">+IVA</span>` : '';
-const spec = itemSpecLabel(it,p) ? ` (${itemSpecLabel(it,p)})` : '';
-const nombre = `${p?p.name:'Eliminado'}${spec}`;
-return `<div style="display:flex;justify-content:space-between;align-items:baseline;gap:4px;font-size:12px;padding:3px 0;border-bottom:1px solid #1e2640">
+const nombre = p?p.name:'Eliminado';
+return `<div style="padding:3px 0;border-bottom:1px solid #1e2640">
+<div style="display:flex;justify-content:space-between;align-items:baseline;gap:4px;font-size:12px">
   <span style="color:#f1f5f9;font-weight:600;flex:1;min-width:0">${it.qty} ${nombre} × ${Q(pr)}/${ul}${ivaLabel}</span>
   <span style="color:#f1f5f9;font-weight:700;flex-shrink:0">${lineDisplay}</span>
+</div>
+${specTagLineHtml(itemSpecLabel(it,p))}
 </div>`;
 }).join('');
 const sCls = o.status==='Concluido'?'bp-fact':o.status==='Cotización'?'bp-quot':'bp-pend';

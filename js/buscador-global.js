@@ -202,10 +202,12 @@ function runGlobalSearch() {
       const sc   = x.status==='Concluido'?'#4ade80':x.status==='Cotización'?'#60a5fa':'#fb923c';
       const route = x.routeId ? (S.routes||[]).find(r=>r.id===x.routeId) : null;
       const itemsHtml = sapCalc ? sapCalc.items.map(r=>{
-        const spec = r.specLabel ? ` (${r.specLabel})` : '';
-        return `<div style="display:flex;justify-content:space-between;font-size:11px;padding:2px 0;border-bottom:1px solid #1e2640">
-          <span style="color:#f1f5f9;font-weight:600;flex:1;min-width:0">${r.qty} ${r.name}${spec} × ${Q(r.sapPriceNoIva)}/${r.sapUnitLabel} <span style="color:#facc15;font-size:10px">+IVA</span></span>
-          <span style="color:#f1f5f9;font-weight:700;flex-shrink:0;margin-left:6px">${Q(r.sapLineTotalWithIva)}</span>
+        return `<div style="padding:2px 0;border-bottom:1px solid #1e2640">
+          <div style="display:flex;justify-content:space-between;font-size:11px">
+            <span style="color:#f1f5f9;font-weight:600;flex:1;min-width:0">${r.qty} ${r.name} × ${Q(r.sapPriceNoIva)}/${r.sapUnitLabel} <span style="color:#facc15;font-size:10px">+IVA</span></span>
+            <span style="color:#f1f5f9;font-weight:700;flex-shrink:0;margin-left:6px">${Q(r.sapLineTotalWithIva)}</span>
+          </div>
+          ${specTagLineHtml(r.specLabel)}
         </div>`;
       }).join('') : x.items.map(it=>{
         const p = S.products.find(pp=>pp.id===it.productId);
@@ -214,11 +216,13 @@ function runGlobalSearch() {
         const ul = p.unitLabel||'unidad';
         const us = itemUnitSizeFor(it, p);
         const sub = pr*it.qty*us;
-        const spec = itemSpecLabel(it,p) ? ` (${itemSpecLabel(it,p)})` : '';
         const iva = x.applyIva?` <span style="color:#facc15;font-size:10px">+IVA</span>`:'';
-        return `<div style="display:flex;justify-content:space-between;font-size:11px;padding:2px 0;border-bottom:1px solid #1e2640">
-          <span style="color:#f1f5f9;font-weight:600;flex:1;min-width:0">${it.qty} ${p.name}${spec} × ${Q(pr)}/${ul}${iva}</span>
-          <span style="color:#f1f5f9;font-weight:700;flex-shrink:0;margin-left:6px">${Q(sub)}</span>
+        return `<div style="padding:2px 0;border-bottom:1px solid #1e2640">
+          <div style="display:flex;justify-content:space-between;font-size:11px">
+            <span style="color:#f1f5f9;font-weight:600;flex:1;min-width:0">${it.qty} ${p.name} × ${Q(pr)}/${ul}${iva}</span>
+            <span style="color:#f1f5f9;font-weight:700;flex-shrink:0;margin-left:6px">${Q(sub)}</span>
+          </div>
+          ${specTagLineHtml(itemSpecLabel(it,p))}
         </div>`;
       }).filter(Boolean).join('');
       const bonusHtml = (x.bonusLines&&x.bonusLines.length)?`<div style="margin-top:4px"><div style="font-size:10px;color:#10b981;font-weight:700">🎁 BONIFICACIÓN</div>${sapCalc ? sapCalc.bonusLines.map(r=>{const spec=r.specLabel?` (${r.specLabel})`:'';return `<div style="font-size:11px;color:#f1f5f9">${r.qty} ${r.name}${spec} × ${Q(r.sapPriceNoIva)}/${r.sapUnitLabel} <span style="font-size:9px;color:#facc15">+IVA</span></div>`;}).join('') : x.bonusLines.map(bl=>{const p=S.products.find(pp=>pp.id===Number(bl.productId));const spec=p?.presentation?` (${p.presentation})`:'';const _ivaTagG=x.applyIva?' <span style="font-size:9px;color:#facc15">+IVA</span>':'';return `<div style="font-size:11px;color:#f1f5f9">${bl.qty} ${p?p.name:'—'}${spec} × ${Q(bl.price||0)}/${p?.unitLabel||'u'}${_ivaTagG}</div>`;}).join('')}</div>`:'';
