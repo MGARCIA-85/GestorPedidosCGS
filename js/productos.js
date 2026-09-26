@@ -289,10 +289,21 @@ function delProd(id) {
   id = Number(id);
   const p = S.products.find(x => Number(x.id)===id);
   const nombre = p ? p.name + (p.presentation ? ' (' + p.presentation + ')' : '') : '—';
-  const hasOrders = S.orders.some(o => o.items.some(i => Number(i.productId)===id));
-  const sub = nombre + (hasOrders ? '\n⚠️ Este producto está en pedidos activos. Se eliminará de ellos.' : '\nEsta acción no se puede deshacer.');
+  // Contar en cuántos pedidos aparece (como venta o como bonificación),
+  // para saber el impacto real antes de eliminar.
+  const affectedOrders = S.orders.filter(o =>
+    (o.items||[]).some(i => Number(i.productId)===id) ||
+    (o.bonusLines||[]).some(bl => Number(bl.productId)===id)
+  );
+  const n = affectedOrders.length;
+  const sub = n
+    ? `${nombre}\n⚠️ Este producto aparece en ${n} pedido${n===1?'':'s'}. Se eliminará de esos pedidos (y de sus bonificaciones, si aplica).\nEsta acción no se puede deshacer.`
+    : `${nombre}\n✅ Este producto no aparece en ningún pedido — puedes eliminarlo con tranquilidad.\nEsta acción no se puede deshacer.`;
   askConfirm('¿Eliminar este producto?', sub, () => {
-    S.orders.forEach(o => { o.items = o.items.filter(i => Number(i.productId)!==id); });
+    S.orders.forEach(o => {
+      o.items = (o.items||[]).filter(i => Number(i.productId)!==id);
+      if (o.bonusLines) o.bonusLines = o.bonusLines.filter(bl => Number(bl.productId)!==id);
+    });
     S.products = S.products.filter(p => Number(p.id)!==id);
     Object.keys(S.cp).forEach(cid => { if (S.cp[cid]) delete S.cp[cid][id]; });
     save(); toast('🗑 Producto eliminado'); renderProducts(); renderList();
