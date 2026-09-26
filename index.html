@@ -279,7 +279,7 @@ function fmtDDMMYYYY(d) {
 <button onclick="location.reload()" style="background:none;border:1px solid #2a3050;border-radius:8px;padding:6px 10px;color:#94a3b8;font-size:18px;cursor:pointer;flex-shrink:0" title="Actualizar">🔄</button>
 <button onclick="toggleGlobalSearch(event)" style="background:none;border:1px solid #2a3050;border-radius:8px;padding:6px 10px;color:#94a3b8;font-size:18px;cursor:pointer;flex-shrink:0" title="Buscar">🔍</button>
 <button onclick="goTab('config')" style="background:none;border:1px solid #2a3050;border-radius:8px;padding:6px 10px;color:#94a3b8;font-size:18px;cursor:pointer;flex-shrink:0" title="Configuración">⚙️</button>
-<span id="app-version-badge" style="font-size:9px;color:#475569;flex-shrink:0;align-self:center;margin-left:-4px" title="Versión de la app">v672</span>
+<span id="app-version-badge" style="font-size:9px;color:#475569;flex-shrink:0;align-self:center;margin-left:-4px" title="Versión de la app">v673</span>
 <span id="offline-badge" style="font-size:12px;flex-shrink:0;align-self:center;white-space:nowrap;color:#10b981" title="Con señal">🟢</span>
 </div>
 
@@ -353,7 +353,7 @@ function fmtDDMMYYYY(d) {
 </div>
 <div id="ord-body" style="display:none">
 <label class="lbl">📅 Fecha del pedido</label>
-<input class="inp" type="date" id="ord-date" style="margin-bottom:10px"/>
+<input class="inp" type="date" id="ord-date" style="margin-bottom:10px" onclick="this.showPicker && this.showPicker()"/>
 <div class="sec">Productos del pedido</div>
 <div id="ord-items"></div>
 <div style="display:flex;gap:8px;margin-bottom:10px">
@@ -387,7 +387,7 @@ function fmtDDMMYYYY(d) {
 <button class="bs" id="ord-delivery-save-btn" style="display:none;font-size:11px;padding:4px 10px;margin-bottom:8px" onclick="saveDeliveryToClient()">💾 Guardar esta dirección en el cliente</button>
 <label class="lbl">📅 Fecha de entrega</label>
 <div style="display:flex;gap:6px;margin-bottom:8px">
-<input class="inp" type="date" id="ord-quote-note" style="margin-bottom:0;flex:1"/>
+<input class="inp" type="date" id="ord-quote-note" style="margin-bottom:0;flex:1" onclick="this.showPicker && this.showPicker()"/>
 <button type="button" onclick="document.getElementById('ord-quote-note').value=''" style="background:#2a3050;border:none;border-radius:8px;color:#f1f5f9;padding:0 12px;cursor:pointer;font-size:16px" title="Quitar fecha">🗑</button>
 </div>
 </div>
