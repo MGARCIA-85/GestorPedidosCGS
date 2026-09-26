@@ -858,7 +858,11 @@ ${(()=>{
       ${o.delivery?`<div style="font-size:11px;color:#3b82f6;font-weight:600;margin-bottom:3px">📍 ${o.delivery}</div>`:''}
       ${o.quoteNote?`<div style="font-size:11px;color:#38bdf8;font-weight:700;margin-bottom:4px">📅 Fecha de entrega: ${fmtEntrega(o.quoteNote)}</div>`:''}
       <div style="background:#0d0f18;border-radius:5px;padding:4px 6px;margin-bottom:4px">${itemsHtml}</div>
-      <div style="font-size:13px;font-weight:700;color:#f1f5f9;margin-bottom:4px">TOTAL ${Q(disp)}${sapCalc?' <span style="font-size:9px;font-weight:700;color:#fff;background:#7c3aed;padding:1px 6px;border-radius:4px;margin-left:4px">🧮 SAP</span>':''}</div>
+      <div style="display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:4px">
+        <span style="font-size:13px;font-weight:700;color:#f1f5f9">TOTAL ${Q(disp)}</span>
+        ${sapCalc?'<span style="font-size:9px;font-weight:700;color:#fff;background:#7c3aed;padding:1px 6px;border-radius:4px">🧮 SAP</span>':''}
+        <button onclick="openSalesforceModal(${o.id})" style="background:#0f1e3a;border:1px solid #3b82f6;border-radius:6px;color:#60a5fa;font-size:10px;font-weight:700;padding:3px 8px;cursor:pointer;white-space:nowrap">☁️ Salesforce</button>
+      </div>
       ${(o.comments&&o.comments.length)?o.comments.filter(Boolean).map(cm=>`<div style="font-size:11px;color:#f97316;font-style:italic;margin-bottom:3px">💬 ${cm}</div>`).join(''):''}
       ${(()=>{
         if (!o.bonusLines||!o.bonusLines.length) return '';

@@ -234,7 +234,11 @@ function runGlobalSearch() {
         ${x.delivery?`<div style="font-size:11px;color:#3b82f6;font-weight:600;margin-bottom:3px">📍 ${x.delivery}</div>`:''}
         ${x.quoteNote?`<div style="font-size:11px;color:#38bdf8;font-weight:700;margin-bottom:4px">📅 Fecha de entrega: ${fmtEntrega(x.quoteNote)}</div>`:''}
         <div style="background:#0d0f18;border-radius:5px;padding:4px 6px;margin-bottom:4px">${itemsHtml}</div>
-        <div style="font-size:13px;font-weight:700;color:#f1f5f9;margin-bottom:3px">TOTAL ${Q(disp)}</div>
+        <div style="display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:3px">
+          <span style="font-size:13px;font-weight:700;color:#f1f5f9">TOTAL ${Q(disp)}</span>
+          ${sapCalc?'<span style="font-size:9px;font-weight:700;color:#fff;background:#7c3aed;padding:1px 6px;border-radius:4px">🧮 SAP</span>':''}
+          <button onclick="openSalesforceModal(${x.id})" style="background:#0f1e3a;border:1px solid #3b82f6;border-radius:6px;color:#60a5fa;font-size:10px;font-weight:700;padding:3px 8px;cursor:pointer;white-space:nowrap">☁️ Salesforce</button>
+        </div>
         ${(x.comments&&x.comments.length)?x.comments.filter(Boolean).map(cm=>`<div style="font-size:11px;color:#f97316;font-style:italic">💬 ${cm}</div>`).join(''):''}
         ${bonusHtml}
       </div>`;

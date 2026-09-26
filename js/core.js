@@ -687,3 +687,125 @@ function getSapCalcForOrder(o) {
 
   return { items, bonusLines, subtotalSinIva, ivaMonto, totalConIva };
 }
+
+// ── Modal "Salesforce": prepara cantidades en kilos y precio por kilo
+// sin IVA para pegar en Salesforce (independiente del checkbox "Se
+// factura por kilo", que solo aplica a facturación SAP). Aquí SIEMPRE se
+// calcula en kilos, para todas las líneas, usando el peso ya congelado
+// (o el de la especificación en vivo si el pedido es de antes de eso).
+function openSalesforceModal(oid) {
+  const o = S.orders.find(x=>x.id===oid);
+  if (!o) return;
+  window._sfOrderId = oid;
+  if (!window._sfRoundMode) window._sfRoundMode = 'none'; // 'none' | 'floor' | 'round'
+  const overlay = document.createElement('div');
+  overlay.id = 'sf-modal-overlay';
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px;overflow-y:auto';
+  overlay.innerHTML = `<div style="background:#1e2236;border:1px solid #2a3050;border-radius:14px;padding:16px;max-width:420px;width:100%;max-height:90vh;overflow-y:auto">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+      <div style="font-size:15px;font-weight:800;color:#f1f5f9">☁️ Salesforce</div>
+      <button onclick="document.getElementById('sf-modal-overlay').remove()" style="background:#2a3050;border:none;border-radius:6px;color:#94a3b8;width:28px;height:28px;font-size:16px;cursor:pointer">✕</button>
+    </div>
+    <div style="display:flex;gap:6px;margin-bottom:14px">
+      <div style="flex:1;background:#161929;border:1px solid #2a3050;border-radius:8px;padding:8px 10px;display:flex;align-items:center;gap:6px;min-width:0">
+        <span style="font-size:12px;color:#94a3b8;white-space:nowrap">Cotización:</span>
+        <input id="sf-quote-inp" value="${o.quote||''}" placeholder="Q-..." style="flex:1;min-width:0;background:transparent;border:none;color:#f1f5f9;font-size:13px;font-weight:700;outline:none"/>
+      </div>
+      <button onclick="saveSfQuote()" style="background:#ef4444;border:none;border-radius:8px;color:#fff;font-weight:700;font-size:12px;padding:0 14px;cursor:pointer">Guardar</button>
+    </div>
+    <div style="font-size:11px;color:#64748b;margin-bottom:6px">Precio por kilo sin IVA:</div>
+    <div style="display:flex;background:#161929;border:1px solid #2a3050;border-radius:8px;overflow:hidden;margin-bottom:14px" id="sf-round-tabs">
+      ${['none','floor','round'].map(m => `<button data-mode="${m}" onclick="setSfRoundMode('${m}')" style="flex:1;padding:9px 4px;border:none;font-size:11px;font-weight:700;cursor:pointer;background:${window._sfRoundMode===m?'#3b82f6':'transparent'};color:${window._sfRoundMode===m?'#fff':'#94a3b8'}">${m==='none'?'Sin redondeo':m==='floor'?'Truncar':'Redondeo normal'}</button>`).join('')}
+    </div>
+    <div style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;font-size:11px">
+        <thead><tr style="border-bottom:1px solid #2a3050">
+          <th style="text-align:left;padding:6px 4px;color:#64748b">Kilos</th>
+          <th style="text-align:left;padding:6px 4px;color:#64748b">Producto</th>
+          <th style="text-align:right;padding:6px 4px;color:#64748b">Precio Unidad</th>
+          <th style="text-align:right;padding:6px 4px;color:#64748b">Precio kilo sin IVA</th>
+        </tr></thead>
+        <tbody id="sf-table-body"></tbody>
+      </table>
+    </div>
+    <div style="font-size:10px;color:#64748b;margin-top:8px">Toca un valor de "Kilos" o "Precio kilo sin IVA" para copiarlo.</div>
+  </div>`;
+  document.body.appendChild(overlay);
+  renderSfTable();
+}
+
+function _sfFmtPrice(n, mode) {
+  if (mode === 'floor') return (Math.floor(n*100)/100).toFixed(2);
+  if (mode === 'round') return (Math.round(n*100)/100).toFixed(2);
+  return String(n);
+}
+function _sfFmtKilos(n) {
+  return (Math.abs(n - Math.round(n)) < 0.005) ? String(Math.round(n)) : String(n);
+}
+
+function renderSfTable() {
+  const tbody = document.getElementById('sf-table-body');
+  if (!tbody) return;
+  const o = S.orders.find(x=>x.id===window._sfOrderId);
+  if (!o) return;
+  const mode = window._sfRoundMode || 'none';
+  const rows = (o.items||[]).map(it => {
+    const p = S.products.find(x=>x.id===Number(it.productId));
+    if (!p) return null;
+    ensureProductSpecs(p);
+    const spec = p.specs.find(s=>String(s.id)===String(it.specId));
+    const weightPerQty = it.specWeightKg != null ? it.specWeightKg : (spec ? spec.weightKg : p.weightKg);
+    const w = Number(weightPerQty) || 0;
+    const kilos = Number(it.qty) * w;
+    if (!kilos) return null;
+    const unitSize = itemUnitSizeFor(it, p);
+    const totalUnits = Number(it.qty) * unitSize;
+    const priceRegular = it.customPrice != null ? it.customPrice : cliPrice(o.clientId, it.productId, p.basePrice||0);
+    const lineTotalWithIva = priceRegular * totalUnits;
+    const priceKiloNoIva = (lineTotalWithIva / kilos) / 1.12;
+    const specLbl = it.specLabel || (spec ? spec.label : '');
+    return { name: p.name + (specLbl?' ('+specLbl+')':''), kilos, priceRegular, priceKiloNoIva, unitLabel: p.unitLabel||'unidad' };
+  }).filter(Boolean);
+
+  tbody.innerHTML = rows.map(r => {
+    const kilosStr = _sfFmtKilos(r.kilos);
+    const priceStr = _sfFmtPrice(r.priceKiloNoIva, mode);
+    return `<tr style="border-bottom:1px solid #1e2640">
+    <td onclick="copySfValue('${kilosStr}')" style="padding:6px 4px;color:#f1f5f9;cursor:pointer" title="Toca para copiar">${kilosStr}</td>
+    <td style="padding:6px 4px;color:#f1f5f9">${r.name}</td>
+    <td style="padding:6px 4px;text-align:right;color:#94a3b8;white-space:nowrap">${Q(r.priceRegular)}/${r.unitLabel}</td>
+    <td onclick="copySfValue('${priceStr}')" style="padding:6px 4px;text-align:right;color:#f1f5f9;cursor:pointer" title="Toca para copiar">${priceStr}</td>
+  </tr>`;
+  }).join('') || '<tr><td colspan="4" style="padding:10px;color:#64748b;text-align:center">Sin productos con peso definido.</td></tr>';
+}
+
+function setSfRoundMode(mode) {
+  window._sfRoundMode = mode;
+  document.querySelectorAll('#sf-round-tabs button').forEach(b => {
+    const active = b.dataset.mode === mode;
+    b.style.background = active ? '#3b82f6' : 'transparent';
+    b.style.color = active ? '#fff' : '#94a3b8';
+  });
+  renderSfTable();
+}
+
+function copySfValue(val) {
+  const done = () => toast('📋 Copiado: '+val, '#10b981');
+  const fail = () => toast('No se pudo copiar', '#ef4444');
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(String(val)).then(done).catch(fail);
+  } else { fail(); }
+}
+
+function saveSfQuote() {
+  const o = S.orders.find(x=>x.id===window._sfOrderId);
+  if (!o) return;
+  const inp = document.getElementById('sf-quote-inp');
+  o.quote = inp ? inp.value.trim() : o.quote;
+  save();
+  document.getElementById('sf-modal-overlay')?.remove();
+  toast('✔ Cotización actualizada');
+  if (typeof renderList === 'function' && document.getElementById('lst-body')) renderList();
+  if (typeof renderClients === 'function' && document.getElementById('cli-list')) renderClients();
+  if (typeof renderRoutes === 'function' && document.getElementById('routes-list')) renderRoutes();
+}

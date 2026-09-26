@@ -242,9 +242,10 @@ function renderRoutes() {
             ${itemsHtml || '<div style="font-size:11px;color:#64748b">Sin productos</div>'}
           </div>
           <!-- Total y bonif -->
-          <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">
+          <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;flex-wrap:wrap">
             <span style="font-size:13px;font-weight:700;color:#f1f5f9">TOTAL ${Q(oDisp)}</span>
             ${sapCalc?'<span style="font-size:9px;font-weight:700;color:#fff;background:#7c3aed;padding:1px 6px;border-radius:4px">🧮 SAP</span>':''}
+            <button onclick="openSalesforceModal(${o.id})" style="background:#0f1e3a;border:1px solid #3b82f6;border-radius:6px;color:#60a5fa;font-size:10px;font-weight:700;padding:3px 8px;cursor:pointer;white-space:nowrap">☁️ Salesforce</button>
             ${(o.bonusLines&&o.bonusLines.length)?(()=>{
               const av = o.bonusLines.every(bl => bl.fromRuleId != null);
               const ae = o.bonusLines.every(bl => bl.exceptional);

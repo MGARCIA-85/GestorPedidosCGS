@@ -2887,27 +2887,17 @@ const bonusBadge = allVerified
 return `<div style="margin-top:6px"><div style="font-size:11px;color:#10b981;font-weight:700;margin-bottom:3px">🎁 BONIFICACIÓN${bonusBadge}</div><div style="background:#0d0f18;border-radius:5px;padding:4px 6px">${bLines}</div></div>`;
 })()}
 <div class="two">
-<div style="display:flex;align-items:center;gap:10px;flex:1;background:#161929;border-radius:9px;padding:8px 12px;border:1px solid #2a3050">
+<div style="display:flex;align-items:center;gap:8px;flex:1;background:#161929;border-radius:9px;padding:8px 12px;border:1px solid #2a3050">
   ${(()=>{
-    const isConf = o.status==='Confirmado'||o.status==='Concluido';
-    const isConc = o.status==='Concluido';
-    return `
-    <label style="display:flex;align-items:center;gap:6px;cursor:pointer" title="Confirmado">
-      <div style="position:relative;width:36px;height:20px">
-        <input type="checkbox" ${isConf?'checked':''} onchange="setOrderStatus(${o.id},this.checked,'switch')" style="opacity:0;width:0;height:0;position:absolute"/>
-        <span onclick="this.previousElementSibling.click()" style="position:absolute;inset:0;border-radius:10px;background:${isConf?'#3b82f6':'#2a3050'};transition:background .2s;cursor:pointer"></span>
-        <span onclick="this.previousElementSibling.previousElementSibling.click()" style="position:absolute;top:3px;left:${isConf?'19px':'3px'};width:14px;height:14px;background:#fff;border-radius:50%;transition:left .2s;pointer-events:none"></span>
-      </div>
-      <span style="font-size:11px;color:${isConf?'#60a5fa':'#64748b'};font-weight:700">${isConf?'Confirmado':'Cotización'}</span>
-    </label>
-    <div style="width:1px;height:20px;background:#2a3050"></div>
-    <label style="display:flex;align-items:center;gap:6px;cursor:pointer" title="Concluido">
-      <div onclick="setOrderStatus(${o.id},null,'check')" style="width:22px;height:22px;border-radius:50%;border:2px solid ${isConc?'#10b981':'#475569'};background:${isConc?'#10b981':'transparent'};display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all .2s">
-        ${isConc?'<span style="color:#fff;font-size:12px;font-weight:900">✓</span>':''}
-      </div>
-      <span style="font-size:11px;color:${isConc?'#10b981':'#64748b'};font-weight:700">${isConc?'Concluido':''}</span>
-    </label>`;
+    const blocked = isOrderBlocked(o);
+    const info = o.cancelled ? {label:'Cancelado', color:'#ef4444'}
+      : blocked ? {label:'Bloqueado', color:'#a855f7'}
+      : o.status==='Concluido' ? {label:'Concluido', color:'#4ade80'}
+      : o.status==='Confirmado' ? {label:'Confirmado', color:'#60a5fa'}
+      : {label:'Cotización', color:'#94a3b8'};
+    return `<span style="font-size:12px;font-weight:800;color:${info.color}">${info.label}</span>`;
   })()}
+  <button onclick="openSalesforceModal(${o.id})" style="margin-left:auto;background:#0f1e3a;border:1px solid #3b82f6;border-radius:7px;color:#60a5fa;font-size:11px;font-weight:700;padding:6px 10px;cursor:pointer;white-space:nowrap">☁️ Salesforce</button>
 </div>
 <select class="sel" style="margin:0;flex:1;font-size:12px" onchange="assignOrderToRoute(${o.id},this)">
 <option value="">🗺️ ${o.routeId ? '✔ '+(S.routes.find(r=>r.id===o.routeId)||{name:'Ruta'}).name : 'Asignar a ruta...'}</option>
