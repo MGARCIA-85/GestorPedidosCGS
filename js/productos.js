@@ -200,17 +200,18 @@ function renderProdSpecsRows(id) {
   const wrap = document.getElementById('epspecs-'+id);
   if (!wrap) return;
   const specs = (window._editingSpecs && window._editingSpecs[id]) || [];
+  const defaultUnitSize = Number(document.getElementById('epus-'+id)?.value) || 1;
   wrap.innerHTML = specs.map((s,i) => `
     <div style="display:flex;gap:6px;align-items:center;background:#161929;border:1px solid #2a3050;border-radius:8px;padding:8px;margin-bottom:6px;flex-wrap:wrap">
       <input class="inp spec-label-${id}" data-i="${i}" placeholder="Especificación" value="${(s.label||'').replace(/"/g,'&quot;')}" style="flex:2;min-width:110px;margin:0"/>
       <input class="inp spec-weight-${id}" data-i="${i}" type="number" step="0.001" min="0" placeholder="Peso kg" value="${s.weightKg??''}" style="flex:1;min-width:75px;margin:0"/>
-      <input class="inp spec-sku-${id}" data-i="${i}" placeholder="SKU" value="${(s.sku||'').replace(/"/g,'&quot;')}" style="flex:1;min-width:95px;margin:0"/>
+      <input class="inp spec-unitsize-${id}" data-i="${i}" type="number" step="0.001" min="0.001" placeholder="Unidades" value="${s.unitSize??defaultUnitSize}" title="Unidades por especificación (puede ser distinto para cada una)" style="flex:1;min-width:80px;margin:0"/>
       <label style="display:flex;align-items:center;gap:4px;font-size:11px;color:${s.active?'#4ade80':'#64748b'};white-space:nowrap">
         <input type="checkbox" class="spec-active-${id}" data-i="${i}" ${s.active?'checked':''} style="width:15px;height:15px;accent-color:#10b981"/> Activa
       </label>
       <button type="button" onclick="removeProdSpecRow(${id},${i})" style="background:none;border:none;color:#ef4444;font-size:16px;cursor:pointer;padding:0 4px">✕</button>
     </div>`).join('') || '<div style="font-size:11px;color:#64748b;margin-bottom:8px">Sin especificaciones. Agrega al menos una.</div>';
-  wrap.querySelectorAll(`.spec-label-${id},.spec-weight-${id},.spec-sku-${id},.spec-active-${id}`).forEach(el => {
+  wrap.querySelectorAll(`.spec-label-${id},.spec-weight-${id},.spec-unitsize-${id},.spec-active-${id}`).forEach(el => {
     el.addEventListener('input', () => syncProdSpecsFromDOM(id));
     el.addEventListener('change', () => syncProdSpecsFromDOM(id));
   });
@@ -222,7 +223,7 @@ function syncProdSpecsFromDOM(id) {
   const specs = window._editingSpecs[id];
   wrap.querySelectorAll(`.spec-label-${id}`).forEach(el => { const i=Number(el.dataset.i); if(specs[i]) specs[i].label = el.value; });
   wrap.querySelectorAll(`.spec-weight-${id}`).forEach(el => { const i=Number(el.dataset.i); if(specs[i]) specs[i].weightKg = el.value!==''?Number(el.value):null; });
-  wrap.querySelectorAll(`.spec-sku-${id}`).forEach(el => { const i=Number(el.dataset.i); if(specs[i]) specs[i].sku = el.value; });
+  wrap.querySelectorAll(`.spec-unitsize-${id}`).forEach(el => { const i=Number(el.dataset.i); if(specs[i]) specs[i].unitSize = el.value!==''?Number(el.value):null; });
   wrap.querySelectorAll(`.spec-active-${id}`).forEach(el => { const i=Number(el.dataset.i); if(specs[i]) specs[i].active = el.checked; });
 }
 
@@ -230,7 +231,8 @@ function addProdSpecRow(id) {
   syncProdSpecsFromDOM(id);
   const specs = window._editingSpecs[id];
   const maxId = specs.reduce((m,s)=>Math.max(m,Number(s.id)||0),0);
-  specs.push({ id: maxId+1, label:'', weightKg:null, sku:'', active:true });
+  const defaultUnitSize = Number(document.getElementById('epus-'+id)?.value) || 1;
+  specs.push({ id: maxId+1, label:'', weightKg:null, unitSize:defaultUnitSize, active:true });
   renderProdSpecsRows(id);
 }
 
@@ -253,7 +255,7 @@ p.facturaPorKilo = document.getElementById('epfacturakilo-'+id)?.checked || fals
 syncProdSpecsFromDOM(id);
 const specsIn = (window._editingSpecs[id]||[]).filter(s => (s.label||'').trim());
 if (!specsIn.length) { toast('Agrega al menos una especificación con nombre','#ef4444'); return; }
-p.specs = specsIn.map(s => ({ id:s.id, label:(s.label||'').trim(), weightKg: s.weightKg!=null&&s.weightKg!==''?Number(s.weightKg):null, sku:(s.sku||'').trim(), active: !!s.active }));
+p.specs = specsIn.map(s => ({ id:s.id, label:(s.label||'').trim(), weightKg: s.weightKg!=null&&s.weightKg!==''?Number(s.weightKg):null, unitSize: s.unitSize!=null&&s.unitSize!==''?Number(s.unitSize):p.unitSize, active: !!s.active }));
 if (!p.specs.some(s=>s.active)) p.specs[0].active = true; // no dejar el producto sin ninguna especificación seleccionable
 syncProductPrimarySpec(p);
 delete window._editingSpecs[id];

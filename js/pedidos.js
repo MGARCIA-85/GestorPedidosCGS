@@ -347,7 +347,7 @@ function renderOrdBonusRows() {
     // Subtotal de la línea de bonificación (mismo cálculo usado en el
     // desglose de bonificación del total), en la misma línea que la
     // especificación.
-    const unitSize = blP ? (Number(blP.unitSize)||1) : 1;
+    const unitSize = itemUnitSizeFor(bl, blP);
     const subtotal = (Number(bl.price)||0) * unitSize * (Number(bl.qty)||0);
     const specAndSubRow = `<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px">
       ${specSelectHtml || '<span></span>'}
@@ -730,7 +730,7 @@ if (refEl) {
   refEl.textContent = 'Lista: '+Q(listPrice);
   refEl.style.color = priceColor;
 }
-const us    = Number(p.unitSize)||1;
+const us    = itemUnitSizeFor(it, p);
 const ul    = p.unitLabel||'unidad';
 const qty   = Number(it.qty)||1;
 const units = qty*us;
@@ -828,9 +828,9 @@ function renderSapCalc() {
   const roundMode = window._sapRoundMode || 'floor';
   const roundFn = (n) => roundMode === 'round' ? Math.round(n*100)/100 : Math.floor(n*100)/100;
 
-  function calcLine(p, qty, priceWithIva, weightKgPerQty) {
+  function calcLine(p, qty, priceWithIva, weightKgPerQty, unitSizePerQty) {
     if (!p || !qty || priceWithIva == null) return null;
-    const unitSize = Number(p.unitSize) || 1;
+    const unitSize = unitSizePerQty != null ? Number(unitSizePerQty) : (Number(p.unitSize) || 1);
     const totalUnits = Number(qty) * unitSize;
     const lineTotalWithIva = totalUnits * Number(priceWithIva);
     let sapQty, sapUnitLabel;
@@ -858,7 +858,7 @@ function renderSapCalc() {
     ensureProductSpecs(p);
     const chosenSpec = p.specs.find(s => String(s.id)===String(it.specId)) || p.specs.filter(s=>s.active)[0] || p.specs[0];
     const priceWithIva = it.price != null ? it.price : cliPrice(cid, p.id, p.basePrice);
-    const r = calcLine(p, it.qty, priceWithIva, chosenSpec ? chosenSpec.weightKg : null);
+    const r = calcLine(p, it.qty, priceWithIva, chosenSpec ? chosenSpec.weightKg : null, chosenSpec ? chosenSpec.unitSize : null);
     if (!r) return;
     grand += r.sapLineTotalWithIva;
     rows += `<div class="prow"><span style="color:#f1f5f9">${p.name}${chosenSpec?' ('+chosenSpec.label+')':''}</span><span style="color:#94a3b8">${_sapFmtQty(r.sapQty)} ${r.sapUnitLabel} × ${Q(r.sapPriceNoIva)}</span></div>`;
@@ -871,7 +871,7 @@ function renderSapCalc() {
     const activeSpecs = p.specs.filter(s=>s.active);
     const chosenSpec = p.specs.find(s=>String(s.id)===String(bl.specId)) || (activeSpecs.length<=1 ? (activeSpecs[0]||p.specs[0]) : null);
     const priceWithIva = Number(bl.price) || 0;
-    const r = calcLine(p, bl.qty, priceWithIva, chosenSpec ? chosenSpec.weightKg : null);
+    const r = calcLine(p, bl.qty, priceWithIva, chosenSpec ? chosenSpec.weightKg : null, chosenSpec ? chosenSpec.unitSize : null);
     if (!r) return;
     grand += r.sapLineTotalWithIva;
     rows += `<div class="prow"><span style="color:#f59e0b">🎁 ${p.name}${chosenSpec?' ('+chosenSpec.label+')':''}</span><span style="color:#94a3b8">${_sapFmtQty(r.sapQty)} ${r.sapUnitLabel} × ${Q(r.sapPriceNoIva)}</span></div>`;
@@ -899,7 +899,7 @@ const totalEl  = document.getElementById('ord-total-val');
 if (!ivaChk || !totalEl) return;
 const allPricesIncIva = document.getElementById('ord-iva-inc')?.checked || false;
 // Calcular subtotal (suma de precios tal como están ingresados) — SOLO productos, sin bonificación
-const subtotal = ordItems.reduce((s,it) => s+lineTotal(cid,it.pid,it.qty, it.price!=null?it.price:null), 0);
+const subtotal = ordItems.reduce((s,it) => s+lineTotal(cid,it.pid,it.qty, it.price!=null?it.price:null, it.specId), 0);
 // Si los precios incluyen IVA, la base es subtotal/1.12 y el IVA es subtotal - base
 const subtotalSinIva      = allPricesIncIva ? subtotal / 1.12 : subtotal;
 const subtotalIvaIncluido = allPricesIncIva ? subtotal : 0;
@@ -943,7 +943,7 @@ if (breakdown) breakdown.style.display = 'none';
 // Desglose SEPARADO de la bonificación (no afecta el total del pedido)
 const bonusSubtotal = (ordBonusLines||[]).reduce((s,bl) => {
   const bp = S.products.find(x=>x.id===Number(bl.productId));
-  const unitSize = bp ? (Number(bp.unitSize)||1) : 1;
+  const unitSize = itemUnitSizeFor(bl, bp);
   return s + (Number(bl.price)||0) * unitSize * (Number(bl.qty)||0);
 }, 0);
 const bonusBox = document.getElementById('ord-bonus-breakdown');
@@ -1124,8 +1124,9 @@ const defaultPrice = cliPrice(cid, Number(it.pid), p?.basePrice||0);
 const usedPrice = (it.price != null) ? Number(it.price) : defaultPrice;
 const item = { productId:Number(it.pid), qty:Number(it.qty), customPrice:usedPrice };
 // Especificación: se "congela" en el pedido la que estaba elegida/activa en
-// este momento (etiqueta, peso y SKU), para que cambios futuros al producto
-// (o a su peso) no alteren pedidos ya hechos ni sus reportes.
+// este momento (etiqueta, peso y unidades por especificación), para que
+// cambios futuros al producto (o a su especificación) no alteren pedidos
+// ya hechos ni sus reportes.
 if (p) {
   ensureProductSpecs(p);
   const chosenSpec = p.specs.find(s => String(s.id)===String(it.specId)) || p.specs.filter(s=>s.active)[0] || p.specs[0];
@@ -1133,7 +1134,7 @@ if (p) {
     item.specId = chosenSpec.id;
     item.specLabel = chosenSpec.label;
     item.specWeightKg = chosenSpec.weightKg;
-    item.specSku = chosenSpec.sku;
+    item.specUnitSize = chosenSpec.unitSize;
   }
 }
 return item;
@@ -2263,7 +2264,7 @@ function generateOrderReport(selIds) {
       return `<tr><td style="padding:5px 8px;font-size:12px">${p?p.name:'—'}${p?.presentation?` <span style="color:#374151">(${p.presentation})</span>`:''}</td>
         <td style="padding:5px 8px;text-align:center;font-size:12px">${it.qty}</td>
         <td style="padding:5px 8px;text-align:right;font-size:12px">${Q(pr)}/${ul}${_ivaTag1}</td>
-        <td style="padding:5px 8px;text-align:right;font-weight:700;font-size:12px">${Q(pr*it.qty*(Number(p?.unitSize)||1))}</td></tr>`;
+        <td style="padding:5px 8px;text-align:right;font-weight:700;font-size:12px">${Q(pr*it.qty*itemUnitSizeFor(it,p))}</td></tr>`;
     }).join('');
     const bonusRowsHtml = sapCalc ? sapCalc.bonusLines.map(r=>`<tr style="background:#f0fdf4"><td style="padding:4px 8px;color:#15803d"><span style="font-size:11px;font-weight:700">${r.name}${r.specLabel?' ('+r.specLabel+')':''}</span>${r.ruleName&&r.ruleName!=='Manual'?`<br><span style="font-size:10px;color:#6b7280">${r.ruleName}</span>`:''}</td>
         <td style="padding:4px 8px;text-align:center;color:#15803d">${r.qty}</td>
@@ -2271,7 +2272,7 @@ function generateOrderReport(selIds) {
         <td style="padding:4px 8px;text-align:right;font-weight:700;color:#15803d">${Q(r.sapLineTotalWithIva)}</td></tr>`).join('') : (o.bonusLines||[]).map(bl=>{
       const p=S.products.find(x=>x.id===Number(bl.productId));
       const ul=p?.unitLabel||'unidad';
-      const sub=(bl.price||0)*bl.qty*(Number(p?.unitSize)||1);
+      const sub=(bl.price||0)*bl.qty*itemUnitSizeFor(bl,p);
       const _ivaTagB1 = o.applyIva ? ' <span style="font-size:10px">+IVA</span>' : '';
       return `<tr style="background:#f0fdf4"><td style="padding:4px 8px;color:#15803d"><span style="font-size:11px;font-weight:700">${p?p.name+' ('+(p.presentation||'')+')'  :'—'}</span>${bl.ruleName&&bl.ruleName!=='Manual'?`<br><span style="font-size:10px;color:#6b7280">${bl.ruleName}</span>`:''}</td>
         <td style="padding:4px 8px;text-align:center;color:#15803d">${bl.qty}</td>
@@ -2548,7 +2549,7 @@ function generateMultiFilterReport() {
       const itemsHtml = itemsToShow.map(it => {
         const pid = Number(it.productId||it.pid);
         const p = S.products.find(x=>x.id===pid);
-        const us = Number(p?.unitSize)||1;
+        const us = itemUnitSizeFor(it, p);
         const pr = (it.customPrice!=null) ? it.customPrice : cliPrice(o.clientId, pid, p?.basePrice||0);
         const sub = pr * us * Number(it.qty);
         ordTotal += sub;
@@ -2712,7 +2713,7 @@ return `<div style="display:flex;justify-content:space-between;align-items:basel
 }).join('') : o.items.map(it => {
 const p      = S.products.find(x => x.id===it.productId);
 const pr     = (it.customPrice != null) ? it.customPrice : cliPrice(o.clientId, it.productId, p?.basePrice||0);
-const us     = Number(p?.unitSize)||1;
+const us     = itemUnitSizeFor(it, p);
 const ul     = p?.unitLabel||'unidad';
 const sub    = pr * it.qty * us;
 const lineDisplay = o.applyIva ? Q(sub*1.12) : Q(sub);
@@ -3027,7 +3028,7 @@ const rows = sapCalc ? sapCalc.items.map(r => `<tr>
 </tr>`).join('') : ord.items.map(it => {
 const p     = S.products.find(x => x.id===(it.productId||Number(it.pid)));
 const pr    = (it.customPrice != null) ? it.customPrice : cliPrice(ord.clientId, it.productId||it.pid, p?.basePrice||0);
-const us    = Number(p?.unitSize)||1;
+const us    = itemUnitSizeFor(it, p);
 const ul    = p?.unitLabel||'unidad';
 const units = Number(it.qty)*us;
 const sub   = pr*units;
@@ -3054,7 +3055,7 @@ const bonusRows = sapCalc ? sapCalc.bonusLines.map(r => `<tr style="background:#
 const p  = S.products.find(x=>x.id===Number(bl.productId));
 const pr = bl.price||0;
 const ul = p?.unitLabel||'unidad';
-const us = Number(p?.unitSize)||1;
+const us = itemUnitSizeFor(bl, p);
 const sub = pr * bl.qty * us;
 const _ivaTagB2 = ord.applyIva ? ' <span style="font-size:9px">+IVA</span>' : '';
 return `<tr style="background:#f0fdf4">

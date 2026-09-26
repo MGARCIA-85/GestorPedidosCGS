@@ -200,7 +200,7 @@ function renderRoutes() {
         const pres = itemSpecLabel(it,p);
         const pr  = (it.customPrice != null) ? it.customPrice : cliPrice(o.clientId, it.productId||it.pid, p?.basePrice||0);
         const ul  = p?.unitLabel || 'unidad';
-        const us  = Number(p?.unitSize) || 1;
+        const us  = itemUnitSizeFor(it, p);
         const sub = pr * it.qty * us;
         const ivaText = o.applyIva ? ' <span style="color:#facc15;font-size:10px">+IVA</span>' : '';
         const specText = pres ? ` <span style="color:#64748b;font-weight:400;font-size:11px">(${pres})</span>` : '';
@@ -909,7 +909,7 @@ function generateRouteReport(rid, selIds, returnHTML=false) {
       </tr>`).join('') : o.items.map(it => {
       const p  = S.products.find(x=>x.id===(it.productId||Number(it.pid)));
       const pr = (it.customPrice!=null)?it.customPrice:cliPrice(o.clientId,it.productId||it.pid,p?.basePrice||0);
-      const us = Number(p?.unitSize)||1;
+      const us = itemUnitSizeFor(it, p);
       const ul = p?.unitLabel||'unidad';
       const sub = pr*us*Number(it.qty);
       return `<tr>
@@ -935,7 +935,7 @@ function generateRouteReport(rid, selIds, returnHTML=false) {
       </tr>`).join('') : (o.bonusLines||[]).map(bl => {
       const p  = S.products.find(x=>x.id===Number(bl.productId));
       const ul = p?.unitLabel||'unidad';
-      const us = Number(p?.unitSize)||1;
+      const us = itemUnitSizeFor(bl, p);
       const sub = (bl.price||0)*bl.qty*us;
       const _ivaTagB3 = o.applyIva ? ' <small>+IVA</small>' : '';
       return `<tr style="background:#eff6ff">

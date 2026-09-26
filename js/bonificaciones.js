@@ -1117,7 +1117,7 @@ function generateBonusSimpleReport(cid, fromStr, toStr, includeBonus=true, prodI
       const itemsHtml = itemsForOrder.map(it => {
         const pid = Number(it.productId||it.pid);
         const p = S.products.find(x=>x.id===pid);
-        const us = Number(p?.unitSize)||1;
+        const us = itemUnitSizeFor(it, p);
         const ul = p?.unitLabel||'unidad';
         const pr = it.customPrice!=null ? Number(it.customPrice)
                  : it.price!=null ? Number(it.price)
@@ -1146,7 +1146,7 @@ function generateBonusSimpleReport(cid, fromStr, toStr, includeBonus=true, prodI
         entregaNum++;
         const bItems = bonusLinesToShow.map(bl => {
           const p = S.products.find(x=>x.id===Number(bl.productId));
-          const us = Number(p?.unitSize)||1;
+          const us = itemUnitSizeFor(bl, p);
           const ul = p?.unitLabel||'unidad';
           const sub = (bl.qty||0) * us * (bl.price||0);
           const spec = '';

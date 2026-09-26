@@ -384,15 +384,40 @@ if (cp && cp[String(pid)] != null) return cp[String(pid)];
 return base;
 }
 
-function lineTotal(cid, pid, qty, customPrice) {
+function lineTotal(cid, pid, qty, customPrice, specId, snapshotUnitSize) {
 const p = S.products.find(x => x.id === Number(pid));
 if (!p) return 0;
 const pr = (customPrice != null) ? customPrice : cliPrice(cid, p.id, p.basePrice);
-return pr * (Number(p.unitSize)||1) * Number(qty);
+let unitSize;
+if (snapshotUnitSize != null) {
+  unitSize = Number(snapshotUnitSize);
+} else {
+  unitSize = Number(p.unitSize) || 1;
+  if (specId != null) {
+    ensureProductSpecs(p);
+    const spec = p.specs.find(s => String(s.id) === String(specId));
+    if (spec && spec.unitSize != null) unitSize = Number(spec.unitSize);
+  }
+}
+return pr * unitSize * Number(qty);
 }
 
 function orderTotal(items, cid) {
-return items.reduce((s, it) => s + lineTotal(cid, it.productId||it.pid, it.qty, it.customPrice != null ? it.customPrice : null), 0);
+return items.reduce((s, it) => s + lineTotal(cid, it.productId||it.pid, it.qty, it.customPrice != null ? it.customPrice : null, it.specId, it.specUnitSize), 0);
+}
+
+// Unidades por especificación a usar para mostrar una línea de pedido: la
+// que quedó "congelada" en el pedido (it.specUnitSize); si no la tiene
+// (pedidos de antes de esto), la de la especificación elegida en vivo; si
+// tampoco, la del producto (comportamiento de siempre).
+function itemUnitSizeFor(it, p) {
+  if (it && it.specUnitSize != null) return Number(it.specUnitSize);
+  if (it && it.specId != null && p) {
+    ensureProductSpecs(p);
+    const spec = p.specs.find(s => String(s.id) === String(it.specId));
+    if (spec && spec.unitSize != null) return Number(spec.unitSize);
+  }
+  return Number(p?.unitSize) || 1;
 }
 
 function toast(msg, col) {
@@ -526,18 +551,22 @@ function ensureProductSpecs(p) {
       id: 1,
       label: p.presentation || '',
       weightKg: p.weightKg != null ? p.weightKg : null,
-      sku: '',
+      unitSize: p.unitSize != null ? p.unitSize : 1,
       active: true
     }];
   }
+  // Migración: especificaciones creadas antes de que existiera "unitSize"
+  // propio por especificación heredan el del producto.
+  p.specs.forEach(s => { if (s.unitSize == null) s.unitSize = p.unitSize != null ? p.unitSize : 1; });
   return p.specs;
 }
 
-// Mantiene p.presentation / p.weightKg como espejo del producto: si hay una
-// sola especificación activa, usa esa; si hay varias, usa la primera activa.
-// Esto es solo para que las pantallas que aún muestran esos campos (listas,
-// buscadores, autocompletados de productos sin pedido asociado) sigan
-// funcionando sin cambios, mostrando un valor representativo.
+// Mantiene p.presentation / p.weightKg / p.unitSize como espejo del
+// producto: si hay una sola especificación activa, usa esa; si hay
+// varias, usa la primera activa. Esto es solo para que las pantallas que
+// aún muestran esos campos (listas, buscadores, autocompletados de
+// productos sin pedido asociado) sigan funcionando sin cambios, mostrando
+// un valor representativo.
 function syncProductPrimarySpec(p) {
   if (!p) return;
   const specs = p.specs || [];
@@ -545,6 +574,15 @@ function syncProductPrimarySpec(p) {
   const primary = active[0] || specs[0] || null;
   p.presentation = primary ? (primary.label || '') : (p.presentation || '');
   p.weightKg = primary ? primary.weightKg : (p.weightKg != null ? p.weightKg : null);
+  if (primary && primary.unitSize != null) p.unitSize = primary.unitSize;
+}
+
+// Unidades por especificación a usar para una línea de pedido: la de la
+// especificación elegida (congelada u obtenida en vivo), o si no hay
+// ninguna, la del producto (comportamiento de siempre).
+function itemUnitSize(specOrNull, p) {
+  if (specOrNull && specOrNull.unitSize != null) return Number(specOrNull.unitSize);
+  return Number(p?.unitSize) || 1;
 }
 
 // Etiqueta de especificación a mostrar para una línea de pedido: usa la que
@@ -571,9 +609,9 @@ function getSapCalcForOrder(o) {
   const roundMode = o.sapRoundMode || 'floor';
   const roundFn = (n) => roundMode === 'round' ? Math.round(n*100)/100 : Math.floor(n*100)/100;
 
-  function calcLine(p, qty, priceWithIva, weightKgPerQty) {
+  function calcLine(p, qty, priceWithIva, weightKgPerQty, unitSizePerQty) {
     if (!p || !qty || priceWithIva == null) return null;
-    const unitSize = Number(p.unitSize) || 1;
+    const unitSize = unitSizePerQty != null ? Number(unitSizePerQty) : (Number(p.unitSize) || 1);
     const totalUnits = Number(qty) * unitSize;
     const lineTotalWithIva = totalUnits * Number(priceWithIva);
     let sapQty, sapUnitLabel;
@@ -598,7 +636,7 @@ function getSapCalcForOrder(o) {
     if (!p) return null;
     ensureProductSpecs(p);
     const spec = p.specs.find(s=>String(s.id)===String(it.specId));
-    const r = calcLine(p, it.qty, it.customPrice, spec?spec.weightKg:null);
+    const r = calcLine(p, it.qty, it.customPrice, spec?spec.weightKg:null, spec?spec.unitSize:(it.specUnitSize!=null?it.specUnitSize:null));
     if (!r) return null;
     return { ...r, productId: p.id, name: p.name, specLabel: spec?spec.label:(it.specLabel||''), qty: it.qty };
   }).filter(Boolean);
@@ -609,7 +647,7 @@ function getSapCalcForOrder(o) {
     ensureProductSpecs(p);
     const activeSpecs = p.specs.filter(s=>s.active);
     const spec = p.specs.find(s=>String(s.id)===String(bl.specId)) || (activeSpecs.length<=1 ? (activeSpecs[0]||p.specs[0]) : null);
-    const r = calcLine(p, bl.qty, bl.price, spec?spec.weightKg:null);
+    const r = calcLine(p, bl.qty, bl.price, spec?spec.weightKg:null, spec?spec.unitSize:null);
     if (!r) return null;
     return { ...r, productId: p.id, name: p.name, specLabel: spec?spec.label:'', qty: bl.qty, ruleName: bl.ruleName, exceptional: bl.exceptional };
   }).filter(Boolean);

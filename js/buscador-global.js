@@ -212,7 +212,7 @@ function runGlobalSearch() {
         if (!p) return '';
         const pr = (it.customPrice!=null)?it.customPrice:cliPrice(x.clientId,it.productId,p.basePrice||0);
         const ul = p.unitLabel||'unidad';
-        const us = Number(p.unitSize)||1;
+        const us = itemUnitSizeFor(it, p);
         const sub = pr*it.qty*us;
         const spec = itemSpecLabel(it,p) ? ` (${itemSpecLabel(it,p)})` : '';
         const iva = x.applyIva?` <span style="color:#facc15;font-size:10px">+IVA</span>`:'';
