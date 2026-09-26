@@ -2165,8 +2165,9 @@ function shareOrderReportSel() {
       const p = S.products.find(x=>x.id===(it.productId||Number(it.pid)));
       const pr = (it.customPrice!=null)?it.customPrice:cliPrice(o.clientId,it.productId||it.pid,p?.basePrice||0);
       const ul = p?.unitLabel||'unidad';
-      const spec = itemSpecLabel(it,p) ? ` (${itemSpecLabel(it,p)})` : '';
-      return `》${it.qty} ${p?p.name:'—'}${spec}\nPrecio: ${Q(pr)}/${ul}${ivaText}`;
+      const specLbl = itemSpecLabel(it,p);
+      const specLine = specLbl ? `\n(${specLbl})` : '';
+      return `》${it.qty} ${p?p.name:'—'}${specLine}\nPrecio: ${Q(pr)}/${ul}${ivaText}`;
     }).join('\n');
   }
 
@@ -2176,10 +2177,11 @@ function shareOrderReportSel() {
     const lines = o.bonusLines.map(bl => {
       const p = S.products.find(x=>x.id===Number(bl.productId));
       const ul = p?.unitLabel||'unidad';
-      const spec = p?.presentation ? ` (${p.presentation})` : '';
+      const specLbl = itemSpecLabel(bl,p);
+      const specLine = specLbl ? `\n(${specLbl})` : '';
       const ivaTxt = o.applyIva ? ' +IVA' : '';
       const comment = bl.ruleName ? `\n${bl.ruleName}` : '';
-      return `${bl.qty} ${p?p.name:'—'}${spec}\nPrecio: ${Q(bl.price||0)}/${ul}${ivaTxt}${comment}`;
+      return `${bl.qty} ${p?p.name:'—'}${specLine}\nPrecio: ${Q(bl.price||0)}/${ul}${ivaTxt}${comment}`;
     }).join('\n');
     return `\n》BONIFICACIÓN《\n${lines}`;
   }
@@ -2414,25 +2416,27 @@ function generateOrderReport(selIds) {
     const ocLine  = o.oc    ? `OC ${o.oc}` : '';
     const cmtLines = cmts.length ? `NOTAS:\n` + cmts.map(c => `• ${c}`).join('\n') : '';
     const prodLines = sapCalc2 ? sapCalc2.items.map(r => {
-      const spec = r.specLabel ? ` (${r.specLabel})` : '';
-      return '》'+r.qty+' '+r.name+spec+'\nPrecio: '+Q(r.sapPriceNoIva)+'/'+r.sapUnitLabel+' + IVA';
+      const specLine = r.specLabel ? '\n('+r.specLabel+')' : '';
+      return '》'+r.qty+' '+r.name+specLine+'\nPrecio: '+Q(r.sapPriceNoIva)+'/'+r.sapUnitLabel+' + IVA';
     }).join('\n') : o.items.map(it => {
       const p = S.products.find(x=>x.id===(it.productId||Number(it.pid)));
       const pr = (it.customPrice!=null)?it.customPrice:cliPrice(o.clientId,it.productId||it.pid,p?.basePrice||0);
       const ul = p?.unitLabel||'unidad';
-      const spec = itemSpecLabel(it,p) ? ` (${itemSpecLabel(it,p)})` : '';
+      const specLbl = itemSpecLabel(it,p);
+      const specLine = specLbl ? '\n('+specLbl+')' : '';
       const ivaText = o.applyIva ? ' + IVA' : '';
-      return '》'+it.qty+' '+(p?p.name:'—')+spec+'\nPrecio: '+Q(pr)+'/'+ul+ivaText;
+      return '》'+it.qty+' '+(p?p.name:'—')+specLine+'\nPrecio: '+Q(pr)+'/'+ul+ivaText;
     }).join('\n');
     const bonusLines = sapCalc2 ? sapCalc2.bonusLines.map(r => {
-      const spec = r.specLabel ? ` (${r.specLabel})` : '';
-      return r.qty+' '+r.name+spec+'\nPrecio: '+Q(r.sapPriceNoIva)+'/'+r.sapUnitLabel+' + IVA';
+      const specLine = r.specLabel ? '\n('+r.specLabel+')' : '';
+      return r.qty+' '+r.name+specLine+'\nPrecio: '+Q(r.sapPriceNoIva)+'/'+r.sapUnitLabel+' + IVA';
     }).join('\n') : (o.bonusLines||[]).map(bl => {
       const p = S.products.find(x=>x.id===Number(bl.productId));
       const ul = p?.unitLabel||'unidad';
-      const spec = p?.presentation ? ' ('+p.presentation+')' : '';
+      const specLbl = itemSpecLabel(bl,p);
+      const specLine = specLbl ? '\n('+specLbl+')' : '';
       const ivaTxtC = o.applyIva ? ' + IVA' : '';
-      return bl.qty+' '+(p?p.name:'—')+spec+'\nPrecio: '+Q(bl.price||0)+'/'+ul+ivaTxtC;
+      return bl.qty+' '+(p?p.name:'—')+specLine+'\nPrecio: '+Q(bl.price||0)+'/'+ul+ivaTxtC;
     }).join('\n');
     const bonusBlock = bonusLines ? '》BONIFICACIÓN《\n'+bonusLines : '';
     const parts = ['#'+(i+1), o.clientName, cotLine, ocLine, cmtLines, '', prodLines];
@@ -3280,29 +3284,31 @@ const sapCalc = ord.sapMode ? getSapCalcForOrder(ord) : null;
 
 // Productos con 》y precio
 const prodLines = sapCalc ? sapCalc.items.map(r => {
-  const spec = r.specLabel ? ` (${r.specLabel})` : '';
-  return `》${r.qty} ${r.name}${spec}\nPrecio: ${Q(r.sapPriceNoIva)}/${r.sapUnitLabel} + IVA`;
+  const specLine = r.specLabel ? `\n(${r.specLabel})` : '';
+  return `》${r.qty} ${r.name}${specLine}\nPrecio: ${Q(r.sapPriceNoIva)}/${r.sapUnitLabel} + IVA`;
 }).join('\n') : ord.items.map(it => {
   const p  = S.products.find(x => x.id===(it.productId||Number(it.pid)));
   const pr = (it.customPrice != null) ? it.customPrice : cliPrice(ord.clientId, it.productId||it.pid, p?.basePrice||0);
   const ul = p?.unitLabel||'unidad';
   const ivaText = ord.applyIva ? ' + IVA' : '';
-  const spec = itemSpecLabel(it,p) ? ` (${itemSpecLabel(it,p)})` : '';
-  return `》${it.qty} ${p?p.name:'—'}${spec}\nPrecio: ${Q(pr)}/${ul}${ivaText}`;
+  const specLbl = itemSpecLabel(it,p);
+  const specLine = specLbl ? `\n(${specLbl})` : '';
+  return `》${it.qty} ${p?p.name:'—'}${specLine}\nPrecio: ${Q(pr)}/${ul}${ivaText}`;
 }).join('\n');
 
 // Bonificaciones
 const bonusLines = sapCalc ? sapCalc.bonusLines.map(r => {
-  const spec = r.specLabel ? ` (${r.specLabel})` : '';
+  const specLine = r.specLabel ? `\n(${r.specLabel})` : '';
   const comment = r.ruleName ? `\n${r.ruleName}` : '';
-  return `${r.qty} ${r.name}${spec}\nPrecio: ${Q(r.sapPriceNoIva)}/${r.sapUnitLabel} +IVA${comment}`;
+  return `${r.qty} ${r.name}${specLine}\nPrecio: ${Q(r.sapPriceNoIva)}/${r.sapUnitLabel} +IVA${comment}`;
 }).join('\n') : (ord.bonusLines||[]).map(bl => {
   const p  = S.products.find(x => x.id===Number(bl.productId));
   const ul = p?.unitLabel||'unidad';
-  const spec = p?.presentation ? ` (${p.presentation})` : '';
+  const specLbl = itemSpecLabel(bl,p);
+  const specLine = specLbl ? `\n(${specLbl})` : '';
   const ivaTxtB = ord.applyIva ? ' +IVA' : '';
   const comment = bl.ruleName ? `\n${bl.ruleName}` : '';
-  return `${bl.qty} ${p?p.name:'—'}${spec}\nPrecio: ${Q(bl.price||0)}/${ul}${ivaTxtB}${comment}`;
+  return `${bl.qty} ${p?p.name:'—'}${specLine}\nPrecio: ${Q(bl.price||0)}/${ul}${ivaTxtB}${comment}`;
 }).join('\n');
 const bonusBlock = bonusLines ? `》BONIFICACIÓN《\n${bonusLines}` : '';
 
@@ -3375,8 +3381,8 @@ if (cmts.length) {
 t += '\n';
 if (sapCalc) {
   sapCalc.items.forEach(r => {
-    const spec = r.specLabel ? ` (${r.specLabel})` : '';
-    t += `- ${r.qty} *${r.name.toUpperCase()}${spec}*\n`;
+    t += `- *${r.qty} ${r.name.toUpperCase()}*\n`;
+    if (r.specLabel) t += `  (${r.specLabel})\n`;
     t += `  Precio ${Q(r.sapPriceNoIva)}/${r.sapUnitLabel} +IVA\n`;
   });
 } else {
@@ -3384,9 +3390,10 @@ if (sapCalc) {
     const p   = S.products.find(x => x.id===(it.productId||Number(it.pid)));
     const pr  = (it.customPrice != null) ? it.customPrice : cliPrice(ord.clientId, it.productId||it.pid, p?.basePrice||0);
     const ul  = p?.unitLabel||'unidad';
-    const spec = itemSpecLabel(it,p) ? ` (${itemSpecLabel(it,p)})` : '';
+    const specLbl = itemSpecLabel(it,p);
     const ivaText = ord.applyIva ? ' +IVA' : '';
-    t += `- ${it.qty} *${p?p.name.toUpperCase():'—'}${spec}*\n`;
+    t += `- *${it.qty} ${p?p.name.toUpperCase():'—'}*\n`;
+    if (specLbl) t += `  (${specLbl})\n`;
     t += `  Precio ${Q(pr)}/${ul}${ivaText}\n`;
   });
 }
@@ -3398,14 +3405,15 @@ t += `\n*TOTAL: ${Q(totalFinal)}*${ivaLabel}\n`;
 
 // Bonificaciones
 const bonusLines = sapCalc ? sapCalc.bonusLines.map(r => {
-  const spec = r.specLabel ? ` (${r.specLabel})` : '';
-  return `- ${r.qty} *${r.name.toUpperCase()}${spec}*\n  Precio ${Q(r.sapPriceNoIva)}/${r.sapUnitLabel} +IVA`;
+  const specLine = r.specLabel ? `\n  (${r.specLabel})` : '';
+  return `- *${r.qty} ${r.name.toUpperCase()}*${specLine}\n  Precio ${Q(r.sapPriceNoIva)}/${r.sapUnitLabel} +IVA`;
 }).join('\n') : (ord.bonusLines||[]).map(bl => {
   const p  = S.products.find(x=>x.id===Number(bl.productId));
   const ul = p?.unitLabel||'unidad';
-  const spec = p?.presentation ? ` (${p.presentation})` : '';
+  const specLbl = itemSpecLabel(bl,p);
+  const specLine = specLbl ? `\n  (${specLbl})` : '';
   const ivaTxtD = ord.applyIva ? ' +IVA' : '';
-  return `- ${bl.qty} *${p?p.name.toUpperCase():'—'}${spec}*\n  Precio ${Q(bl.price||0)}/${ul}${ivaTxtD}`;
+  return `- *${bl.qty} ${p?p.name.toUpperCase():'—'}*${specLine}\n  Precio ${Q(bl.price||0)}/${ul}${ivaTxtD}`;
 }).join('\n');
 if (bonusLines) t += `\n》BONIFICACIÓN《\n${bonusLines}\n`;
 
