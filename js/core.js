@@ -616,11 +616,24 @@ function itemUnitSize(specOrNull, p) {
 
 // Etiqueta de especificación a mostrar para una línea de pedido: usa la que
 // quedó "congelada" en el pedido al momento de venderse (it.specLabel); si
-// el pedido es de antes de que existiera esto, cae al valor actual del
-// producto (comportamiento igual al de siempre).
+// el pedido es de antes de que existiera esto, intenta encontrarla de
+// varias formas antes de rendirse: por el specId guardado, por el "espejo"
+// del producto (p.presentation), por su especificación activa, o por la
+// primera que tenga — así no depende de que ese espejo esté al día.
 function itemSpecLabel(it, p) {
   if (it && it.specLabel) return it.specLabel;
-  return p ? (p.presentation || '') : '';
+  if (!p) return '';
+  if (it && it.specId != null && p.specs) {
+    const bySpecId = p.specs.find(s => String(s.id) === String(it.specId));
+    if (bySpecId && bySpecId.label) return bySpecId.label;
+  }
+  if (p.presentation) return p.presentation;
+  if (p.specs && p.specs.length) {
+    const active = p.specs.filter(s => s.active);
+    if (active[0] && active[0].label) return active[0].label;
+    if (p.specs[0] && p.specs[0].label) return p.specs[0].label;
+  }
+  return '';
 }
 
 // ── Modo SAP: cálculo compartido para mostrar un pedido convertido ─────
