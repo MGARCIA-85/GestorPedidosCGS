@@ -279,7 +279,7 @@ function fmtDDMMYYYY(d) {
 <button onclick="location.reload()" style="background:none;border:1px solid #2a3050;border-radius:8px;padding:6px 10px;color:#94a3b8;font-size:18px;cursor:pointer;flex-shrink:0" title="Actualizar">🔄</button>
 <button onclick="toggleGlobalSearch(event)" style="background:none;border:1px solid #2a3050;border-radius:8px;padding:6px 10px;color:#94a3b8;font-size:18px;cursor:pointer;flex-shrink:0" title="Buscar">🔍</button>
 <button onclick="goTab('config')" style="background:none;border:1px solid #2a3050;border-radius:8px;padding:6px 10px;color:#94a3b8;font-size:18px;cursor:pointer;flex-shrink:0" title="Configuración">⚙️</button>
-<span id="app-version-badge" style="font-size:9px;color:#475569;flex-shrink:0;align-self:center;margin-left:-4px" title="Versión de la app">v664</span>
+<span id="app-version-badge" style="font-size:9px;color:#475569;flex-shrink:0;align-self:center;margin-left:-4px" title="Versión de la app">v665</span>
 <span id="offline-badge" style="font-size:12px;flex-shrink:0;align-self:center;white-space:nowrap;color:#10b981" title="Con señal">🟢</span>
 </div>
 
@@ -356,7 +356,10 @@ function fmtDDMMYYYY(d) {
 <input class="inp" type="date" id="ord-date" style="margin-bottom:10px"/>
 <div class="sec">Productos del pedido</div>
 <div id="ord-items"></div>
-<button class="bs" style="width:100%;padding:10px;margin-bottom:10px" onclick="addOrdItem()">+ Agregar otro producto</button>
+<div style="display:flex;gap:8px;margin-bottom:10px">
+<button class="bs" style="flex:1;padding:10px" onclick="addOrdItem()">+ Agregar otro producto</button>
+<button class="bg" style="padding:10px 14px;border-radius:9px;font-size:16px" onclick="addOrdBonusRow()" title="Agregar bonificación">🎁</button>
+</div>
 <!-- Sección de bonificaciones del pedido -->
 <div id="ord-bonus-section" style="display:none;margin-top:4px">
 <div class="card" style="padding:10px;border:1px solid #10b98133">
@@ -407,33 +410,19 @@ function fmtDDMMYYYY(d) {
 <input class="inp" id="ord-contact" placeholder="Nombre de la persona de contacto"/>
 </div>
 <div class="card" id="ord-total-box" style="display:none">
-<!-- Toggle: Agregar IVA -->
-<div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;padding:9px 12px;background:#161929;border-radius:8px;border:1px solid #2a3050">
-<label style="display:flex;align-items:center;gap:8px;cursor:pointer;width:100%">
-<div style="position:relative;width:40px;height:22px;flex-shrink:0">
-<input type="checkbox" id="ord-iva" onchange="if(this.checked){document.getElementById('ord-iva-inc').checked=false;} refreshTotalWithIVA()" style="opacity:0;width:0;height:0;position:absolute"/>
-<span id="iva-track" style="position:absolute;inset:0;background:#2a3050;border-radius:11px;transition:background .2s;cursor:pointer" onclick="document.getElementById('ord-iva').click()"></span>
-<span id="iva-thumb" style="position:absolute;top:3px;left:3px;width:16px;height:16px;background:#fff;border-radius:50%;transition:left .2s;pointer-events:none"></span>
+<!-- Interruptor único: IVA incluido ↔ Agregar IVA -->
+<input type="checkbox" id="ord-iva" onchange="refreshTotalWithIVA()" style="display:none"/>
+<input type="checkbox" id="ord-iva-inc" checked onchange="refreshTotalWithIVA()" style="display:none"/>
+<div style="position:relative;margin-bottom:10px;padding:4px;background:#161929;border-radius:11px;border:1px solid #2a3050">
+<div id="iva-switch-thumb" style="position:absolute;top:4px;bottom:4px;left:4px;width:calc(50% - 4px);background:#3b82f6;border-radius:8px;transition:left .2s"></div>
+<div style="display:flex;position:relative">
+<div onclick="setIvaMode('inc')" style="flex:1;text-align:center;padding:10px 6px;cursor:pointer">
+<div id="iva-inc-label" style="font-size:12px;font-weight:700;color:#fff;transition:color .2s">IVA incluido</div>
 </div>
-<div>
-<div style="font-size:13px;font-weight:700;color:#f1f5f9">Agregar IVA (12%)</div>
-<div style="font-size:10px;color:#64748b">Suma el impuesto al total</div>
+<div onclick="setIvaMode('add')" style="flex:1;text-align:center;padding:10px 6px;cursor:pointer">
+<div id="iva-add-label" style="font-size:12px;font-weight:700;color:#94a3b8;transition:color .2s">Agregar IVA</div>
 </div>
-</label>
 </div>
-<!-- Casilla: Precio ya incluye IVA -->
-<div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;padding:9px 12px;background:#161929;border-radius:8px;border:1px solid #2a3050">
-<label style="display:flex;align-items:center;gap:8px;cursor:pointer;width:100%">
-<div style="position:relative;width:40px;height:22px;flex-shrink:0">
-<input type="checkbox" id="ord-iva-inc" checked onchange="if(this.checked){document.getElementById('ord-iva').checked=false;} refreshTotalWithIVA()" style="opacity:0;width:0;height:0;position:absolute"/>
-<span id="iva-inc-track" style="position:absolute;inset:0;background:#2a3050;border-radius:11px;transition:background .2s;cursor:pointer" onclick="document.getElementById('ord-iva-inc').click()"></span>
-<span id="iva-inc-thumb" style="position:absolute;top:3px;left:3px;width:16px;height:16px;background:#fff;border-radius:50%;transition:left .2s;pointer-events:none"></span>
-</div>
-<div>
-<div style="font-size:13px;font-weight:700;color:#f1f5f9">Los precios ya incluyen IVA</div>
-<div style="font-size:10px;color:#64748b">Desglosar base + IVA 12% del precio</div>
-</div>
-</label>
 </div>
 <!-- Desglose -->
 <div id="ord-breakdown" style="display:none;margin-bottom:8px">
@@ -460,7 +449,6 @@ Usar redondeo normal (por defecto trunca hacia abajo)
 <div style="display:flex;gap:8px;margin-top:4px">
 <button class="bp" style="flex:2" id="btn-submit" onclick="submitOrder(false)">✅ Registrar Pedido</button>
 <button class="bb" style="flex:1;border-radius:9px;padding:12px;font-weight:800;font-size:13px" onclick="submitOrder(true)">📄 Cotizar</button>
-<button class="bg" style="padding:12px 14px;border-radius:9px;font-size:16px" onclick="addOrdBonusRow()" title="Agregar bonificación">🎁</button>
 </div>
 </div>
 <div id="ord-ph" style="text-align:center;color:#64748b;padding:28px 16px">
