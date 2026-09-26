@@ -901,11 +901,31 @@ ${rows || '<div style="font-size:12px;color:#64748b">Agrega productos para ver e
 </div>`;
 }
 
+// Interruptor único IVA incluido ↔ Agregar IVA. Por debajo sigue usando
+// los mismos 2 checkboxes de siempre (ord-iva / ord-iva-inc, ocultos),
+// así que todo el resto del código que ya los lee sigue funcionando igual.
+function setIvaMode(mode) {
+  const ivaChk = document.getElementById('ord-iva');
+  const ivaIncChk = document.getElementById('ord-iva-inc');
+  if (!ivaChk || !ivaIncChk) return;
+  if (mode === 'add') { ivaChk.checked = true; ivaIncChk.checked = false; }
+  else { ivaChk.checked = false; ivaIncChk.checked = true; }
+  refreshTotalWithIVA();
+}
+function syncIvaSwitchUI() {
+  const ivaChk = document.getElementById('ord-iva');
+  const thumb  = document.getElementById('iva-switch-thumb');
+  const incLbl = document.getElementById('iva-inc-label');
+  const addLbl = document.getElementById('iva-add-label');
+  const isAdd  = !!(ivaChk && ivaChk.checked);
+  if (thumb) thumb.style.left = isAdd ? '50%' : '4px';
+  if (incLbl) incLbl.style.color = isAdd ? '#94a3b8' : '#fff';
+  if (addLbl) addLbl.style.color = isAdd ? '#fff' : '#94a3b8';
+}
+
 function refreshTotalWithIVA() {
 const cid      = Number(document.getElementById('ord-cli').value);
 const ivaChk   = document.getElementById('ord-iva');
-const track    = document.getElementById('iva-track');
-const thumb    = document.getElementById('iva-thumb');
 const breakdown= document.getElementById('ord-breakdown');
 const subtotalEl = document.getElementById('ord-subtotal-val');
 const ivaEl    = document.getElementById('ord-iva-val');
@@ -918,14 +938,8 @@ const subtotal = ordItems.reduce((s,it) => s+lineTotal(cid,it.pid,it.qty, it.pri
 const subtotalSinIva      = allPricesIncIva ? subtotal / 1.12 : subtotal;
 const subtotalIvaIncluido = allPricesIncIva ? subtotal : 0;
 const useIva   = ivaChk.checked;
-const incTrack = document.getElementById('iva-inc-track');
-const incThumb = document.getElementById('iva-inc-thumb');
-// Apariencia toggle "Agregar IVA"
-if (track)    track.style.background = useIva          ? '#f59e0b' : '#2a3050';
-if (thumb)    thumb.style.left       = useIva          ? '21px'    : '3px';
-// Apariencia toggle "Ya incluye IVA"
-if (incTrack) incTrack.style.background = allPricesIncIva ? '#60a5fa' : '#2a3050';
-if (incThumb) incThumb.style.left       = allPricesIncIva ? '21px'    : '3px';
+// Apariencia del interruptor único IVA incluido / Agregar IVA
+syncIvaSwitchUI();
 // Calcular totales
 let baseParaIva, ivaMonto, totalFinal;
 if (allPricesIncIva) {
@@ -1249,6 +1263,7 @@ document.getElementById('ord-cli').value = ''; document.getElementById('ord-cli-
 ordComments = [''];
 document.getElementById('ord-iva').checked = false;
 document.getElementById('ord-iva-inc').checked = true;
+syncIvaSwitchUI();
 refreshTotalWithIVA();
 onCliChange();
 if (_cameFromClient !== null) {
@@ -1366,6 +1381,7 @@ function finishSave() {
   ordComments = [''];
   document.getElementById('ord-iva').checked = false;
   document.getElementById('ord-iva-inc').checked = true;
+  syncIvaSwitchUI();
   refreshTotalWithIVA();
   ordItems = [{pid:'',qty:1}]; onCliChange();
   if (_cameFromClient !== null) {
@@ -1415,6 +1431,23 @@ const ivaChk = document.getElementById('ord-iva');
 if (ivaChk) ivaChk.checked = !!ord.applyIva;
 const ivaIncChk = document.getElementById('ord-iva-inc');
 if (ivaIncChk) ivaIncChk.checked = !!ord.pricesIncIva;
+syncIvaSwitchUI();
+// Restaurar el modo SAP si este pedido se guardó con él activo (con
+// opción de apagarlo manualmente, como cualquier otro pedido)
+resetSapCalcUI();
+if (ord.sapMode) {
+  window._sapCalcOpen = true;
+  window._sapRoundMode = ord.sapRoundMode || 'floor';
+  const panel = document.getElementById('ord-sap-panel');
+  const roundRow = document.getElementById('ord-sap-round-row');
+  const btn = document.getElementById('btn-sap-calc');
+  const roundChk = document.getElementById('ord-sap-round');
+  if (panel) panel.style.display = 'block';
+  if (roundRow) roundRow.style.display = 'block';
+  if (btn) { btn.style.background = '#7c3aed'; btn.style.color = '#fff'; }
+  if (roundChk) roundChk.checked = (window._sapRoundMode === 'round');
+  renderSapCalc();
+}
 const quoteInp = document.getElementById('ord-quote');
 if (quoteInp) quoteInp.value = ord.quote || '';
 const quoteNoteInp = document.getElementById('ord-quote-note');
