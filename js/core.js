@@ -732,14 +732,17 @@ function orderLinesData(o, sapCalc) {
 function orderBonusData(o, sapCalc) {
   if (!o.bonusLines || !o.bonusLines.length) return [];
   if (sapCalc) return sapCalc.bonusLines.map(r => ({
-    qty: r.qty, name: r.name, specLabel: r.specLabel,
-    price: r.sapPriceNoIva, unit: r.sapUnitLabel, ivaTag: true
+    qty: r.qty, name: r.name, specLabel: r.specLabel, ruleName: r.ruleName,
+    price: r.sapPriceNoIva, unit: r.sapUnitLabel, ivaTag: true,
+    subtotalNoIva: r.sapLineTotalNoIva
   }));
   return o.bonusLines.map(bl => {
     const p = S.products.find(x => x.id === Number(bl.productId));
+    const unitSize = itemUnitSizeFor(bl, p);
     return {
-      qty: bl.qty, name: p ? p.name : '—', specLabel: itemSpecLabel(bl, p),
-      price: bl.price || 0, unit: p?.unitLabel || 'unidad', ivaTag: !!o.applyIva
+      qty: bl.qty, name: p ? p.name : '—', specLabel: itemSpecLabel(bl, p), ruleName: bl.ruleName,
+      price: bl.price || 0, unit: p?.unitLabel || 'unidad', ivaTag: !!o.applyIva,
+      subtotalNoIva: (bl.price || 0) * bl.qty * unitSize
     };
   });
 }

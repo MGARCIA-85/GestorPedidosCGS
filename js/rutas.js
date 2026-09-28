@@ -824,24 +824,14 @@ function generateRouteReport(rid, selIds, returnHTML=false) {
   const rows = orders.map((o, rIdx) => {
     const disp = orderTotalWithIva(o);
     const sapCalc = o.sapMode ? getSapCalcForOrder(o) : null;
-    const items = sapCalc ? sapCalc.items.map(r => `<tr>
-        <td style="padding:5px 8px">${r.name}${r.specLabel?` <span style="color:#374151">(${r.specLabel})</span>`:''}</td>
-        <td style="padding:5px 8px;text-align:center">${r.qty}</td>
-        <td style="padding:5px 8px;text-align:right">${Q(r.sapPriceNoIva)}/${r.sapUnitLabel}<br><small style="color:#2563eb">+IVA</small></td>
-        <td style="padding:5px 8px;text-align:right;font-weight:700">${Q(r.sapLineTotalWithIva)}</td>
-      </tr>`).join('') : o.items.map(it => {
-      const p  = S.products.find(x=>x.id===(it.productId||Number(it.pid)));
-      const pr = (it.customPrice!=null)?it.customPrice:cliPrice(o.clientId,it.productId||it.pid,p?.basePrice||0);
-      const us = itemUnitSizeFor(it, p);
-      const ul = p?.unitLabel||'unidad';
-      const sub = pr*us*Number(it.qty);
-      return `<tr>
-        <td style="padding:5px 8px">${p?p.name:'—'}${p?.presentation?` <span style="color:#374151">(${p.presentation})</span>`:''}</td>
-        <td style="padding:5px 8px;text-align:center">${it.qty}</td>
-        <td style="padding:5px 8px;text-align:right">${Q(pr)}/${ul}${o.applyIva?'<br><small style="color:#2563eb">+IVA: '+Q(pr*0.12)+'/'+ul+'</small>':''}</td>
-        <td style="padding:5px 8px;text-align:right;font-weight:700">${Q(o.applyIva?sub*1.12:sub)}</td>
-      </tr>`;
-    }).join('');
+    // El monto de cada línea va SIN IVA (con la etiqueta +IVA cuando aplica);
+    // el que carga el IVA es el TOTAL. Mismos datos que las tarjetas.
+    const items = orderLinesData(o, sapCalc).map(l => `<tr>
+        <td style="padding:5px 8px">${l.name}${l.specLabel?` <span style="color:#374151">(${l.specLabel})</span>`:''}</td>
+        <td style="padding:5px 8px;text-align:center">${l.qty}</td>
+        <td style="padding:5px 8px;text-align:right">${Q(l.price)}/${l.unit}${l.ivaTag?`<br><small style="color:#2563eb">+IVA${sapCalc?'':': '+Q(l.price*0.12)+'/'+l.unit}</small>`:''}</td>
+        <td style="padding:5px 8px;text-align:right;font-weight:700">${Q(l.subtotal)}</td>
+      </tr>`).join('');
     const cmts = (o.comments&&o.comments.length)?o.comments:(o.note?[o.note]:[]);
     const sc = o.status==='Concluido'?'#15803d':o.status==='Cotización'?'#64748b':'#1d4ed8';
     const metaExtra = [
@@ -850,24 +840,12 @@ function generateRouteReport(rid, selIds, returnHTML=false) {
     ].filter(Boolean).join(' &nbsp;·&nbsp; ');
     const deliveryHtmlR = o.delivery ? `<div style="padding:4px 12px;font-size:16px;background:#f0f9ff;border-top:1px solid #bae6fd;color:#0369a1;font-weight:700">📍 Entrega: ${o.delivery}</div>` : '';
     // Bonificaciones
-    const bonusRows = sapCalc ? sapCalc.bonusLines.map(r => `<tr style="background:#eff6ff">
-        <td style="padding:5px 8px;color:#15803d"><small style="font-weight:700">${r.name}${r.specLabel?' ('+r.specLabel+')':''}</small>${r.ruleName&&r.ruleName!=='Manual'?`<br><small style="color:#6b7280">${r.ruleName}</small>`:''}</td>
-        <td style="padding:5px 8px;text-align:center;color:#15803d">${r.qty}</td>
-        <td style="padding:5px 8px;text-align:right;color:#15803d">${Q(r.sapPriceNoIva)}/${r.sapUnitLabel} <small>+IVA</small></td>
-        <td style="padding:5px 8px;text-align:right;font-weight:700;color:#15803d">${Q(r.sapLineTotalWithIva)}</td>
-      </tr>`).join('') : (o.bonusLines||[]).map(bl => {
-      const p  = S.products.find(x=>x.id===Number(bl.productId));
-      const ul = p?.unitLabel||'unidad';
-      const us = itemUnitSizeFor(bl, p);
-      const sub = (bl.price||0)*bl.qty*us;
-      const _ivaTagB3 = o.applyIva ? ' <small>+IVA</small>' : '';
-      return `<tr style="background:#eff6ff">
-        <td style="padding:5px 8px;color:#15803d"><small style="font-weight:700">${p?p.name+' ('+p.presentation+')':'—'}</small>${bl.ruleName&&bl.ruleName!=='Manual'?`<br><small style="color:#6b7280">${bl.ruleName}</small>`:''}</td>
-        <td style="padding:5px 8px;text-align:center;color:#15803d">${bl.qty}</td>
-        <td style="padding:5px 8px;text-align:right;color:#15803d">${Q(bl.price||0)}/${ul}${_ivaTagB3}</td>
-        <td style="padding:5px 8px;text-align:right;font-weight:700;color:#15803d">${Q(sub)}</td>
-      </tr>`;
-    }).join('');
+    const bonusRows = orderBonusData(o, sapCalc).map(b => `<tr style="background:#eff6ff">
+        <td style="padding:5px 8px;color:#15803d"><small style="font-weight:700">${b.name}${b.specLabel?' ('+b.specLabel+')':''}</small>${b.ruleName&&b.ruleName!=='Manual'?`<br><small style="color:#6b7280">${b.ruleName}</small>`:''}</td>
+        <td style="padding:5px 8px;text-align:center;color:#15803d">${b.qty}</td>
+        <td style="padding:5px 8px;text-align:right;color:#15803d">${Q(b.price)}/${b.unit}${b.ivaTag?' <small>+IVA</small>':''}</td>
+        <td style="padding:5px 8px;text-align:right;font-weight:700;color:#15803d">${Q(b.subtotalNoIva)}</td>
+      </tr>`).join('');
     // Comentarios — primero amarillo, resto azul oscuro
     const cmtsHtml = cmts.length ? `<div style="padding:6px 12px;font-size:11px;background:#fffbeb;border-top:1px solid #fde68a;border-bottom:1px solid #fde68a">` +
       cmts.map((c,ci) => ci===0
