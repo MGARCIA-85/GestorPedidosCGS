@@ -2139,33 +2139,11 @@ function shareOrderReportSel() {
     return (o.comments&&o.comments.length ? o.comments : (o.note?[o.note]:[])).filter(c=>c&&c.trim());
   }
 
-  // Helper: líneas de productos de un pedido
-  function getProdLines(o) {
-    const ivaText = o.applyIva ? ' + IVA' : '';
-    return o.items.map(it => {
-      const p = S.products.find(x=>x.id===(it.productId||Number(it.pid)));
-      const pr = (it.customPrice!=null)?it.customPrice:cliPrice(o.clientId,it.productId||it.pid,p?.basePrice||0);
-      const ul = p?.unitLabel||'unidad';
-      const specLbl = itemSpecLabel(it,p);
-      const specLine = specLbl ? `\n(${specLbl})` : '';
-      return `》${it.qty} ${p?p.name:'—'}${specLine}\nPrecio: ${Q(pr)}/${ul}${ivaText}`;
-    }).join('\n');
-  }
-
-  // Helper: bloque de bonificación
-  function getBonusBlock(o) {
-    if (!o.bonusLines || !o.bonusLines.length) return '';
-    const lines = o.bonusLines.map(bl => {
-      const p = S.products.find(x=>x.id===Number(bl.productId));
-      const ul = p?.unitLabel||'unidad';
-      const specLbl = itemSpecLabel(bl,p);
-      const specLine = specLbl ? `\n(${specLbl})` : '';
-      const ivaTxt = o.applyIva ? ' +IVA' : '';
-      const comment = bl.ruleName ? `\n${bl.ruleName}` : '';
-      return `${bl.qty} ${p?p.name:'—'}${specLine}\nPrecio: ${Q(bl.price||0)}/${ul}${ivaTxt}${comment}`;
-    }).join('\n');
-    return `\n》BONIFICACIÓN《\n${lines}`;
-  }
+  // Líneas de productos, bonificación y total: piezas compartidas con el
+  // correo de un pedido — antes estaban copiadas aquí sin considerar el
+  // modo SAP (mostraban el precio real en vez del convertido).
+  function getProdLines(o) { return orderProdLinesText(o); }
+  function getBonusBlock(o) { const t = orderBonusBlockText(o); return t ? '\n' + t : ''; }
 
   // Helper: total de un pedido
   function getTotal(o) {
@@ -2197,7 +2175,8 @@ function shareOrderReportSel() {
     if (sameCmts) {
       // Caso 1: mismo cliente, comentarios idénticos — comentarios una sola vez al inicio
       const sharedCmts = getCmts(filtered[0]);
-      const cmtBlock = sharedCmts.length ? `NOTAS:\n` + sharedCmts.map(c=>`• ${c}`).join('\n') + '\n\n' : '';
+      const _notas1 = notasBlockText(sharedCmts);
+      const cmtBlock = _notas1 ? _notas1 + '\n\n' : '';
       // Dirección: si todos tienen la misma va arriba, si no va en cada pedido
       const firstDelivery = filtered[0].delivery || '';
       const sameDelivery = filtered.every(o => (o.delivery || '') === firstDelivery);
@@ -2208,7 +2187,7 @@ function shareOrderReportSel() {
       const sharedQNote = sameQNote && firstQNote ? `Fecha de entrega: ${fmtEntrega(firstQNote)}\n\n` : '';
 
       const pedidoLines = filtered.map((o, i) => {
-        const cotLine = (!sameQuote && o.quote) ? `Cot. ${o.quote}\n` : '';
+        const cotLine = (!sameQuote && o.quote) ? `Cot: ${o.quote}\n` : '';
         const ocLine = o.oc ? `OC ${o.oc}\n` : '';
         const qNoteLine = (!sameQNote && o.quoteNote) ? `Fecha de entrega: ${fmtEntrega(o.quoteNote)}\n` : '';
         const deliveryLine = (!sameDelivery && o.delivery) ? `Entrega: ${o.delivery}\n` : '';
@@ -2225,7 +2204,8 @@ function shareOrderReportSel() {
       const commonCmts = allCmtSets[0].filter(c =>
         allCmtSets.every(cmts => cmts.includes(c))
       );
-      const commonBlock = commonCmts.length ? `NOTAS:\n` + commonCmts.map(c=>`• ${c}`).join('\n') + '\n\n' : '';
+      const _notas2 = notasBlockText(commonCmts);
+      const commonBlock = _notas2 ? _notas2 + '\n\n' : '';
       // Dirección: si todos tienen la misma va arriba, si no va en cada pedido
       const firstDelivery2 = filtered[0].delivery || '';
       const sameDelivery2 = filtered.every(o => (o.delivery || '') === firstDelivery2);
@@ -2236,12 +2216,13 @@ function shareOrderReportSel() {
       const sharedQNote2 = sameQNote2 && firstQNote2 ? `Fecha de entrega: ${fmtEntrega(firstQNote2)}\n\n` : '';
 
       const pedidoLines = filtered.map((o, i) => {
-        const cotLine = (!sameQuote && o.quote) ? `Cot. ${o.quote}\n` : '';
+        const cotLine = (!sameQuote && o.quote) ? `Cot: ${o.quote}\n` : '';
         const ocLine = o.oc ? `OC ${o.oc}\n` : '';
         const qNoteLine = (!sameQNote2 && o.quoteNote) ? `Fecha de entrega: ${fmtEntrega(o.quoteNote)}\n` : '';
         const deliveryLine = (!sameDelivery2 && o.delivery) ? `Entrega: ${o.delivery}\n` : '';
         const uniqueCmts = getCmts(o).filter(c => !commonCmts.includes(c));
-        const cmtBlock = uniqueCmts.length ? `NOTAS:\n` + uniqueCmts.map(c=>`• ${c}`).join('\n') + '\n\n' : '';
+        const _notas3 = notasBlockText(uniqueCmts);
+        const cmtBlock = _notas3 ? _notas3 + '\n\n' : '';
         const prodLines = getProdLines(o);
         const bonusBlock = getBonusBlock(o);
         return `Pedido #${i+1}\n${cotLine}${ocLine}${qNoteLine}${deliveryLine}${cmtBlock}${prodLines}\nTOTAL: ${Q(getTotal(o))}${bonusBlock}`;
@@ -2261,7 +2242,7 @@ function shareOrderReportSel() {
       const ocLine  = o.oc    ? `OC ${o.oc}` : '';
       const qNoteLine3 = o.quoteNote ? `Fecha de entrega: ${fmtEntrega(o.quoteNote)}` : '';
       const deliveryLine = o.delivery ? `Entrega: ${o.delivery}` : '';
-      const cmtLines = cmts.length ? `NOTAS:\n` + cmts.map(c => `• ${c}`).join('\n') : '';
+      const cmtLines = notasBlockText(cmts);
       const prodLines = getProdLines(o);
       const bonusBlock = getBonusBlock(o);
       let t = [`Pedido #${i+1}`, idLine, cotLine, ocLine, qNoteLine3, deliveryLine].filter(Boolean).join('\n');
@@ -2366,34 +2347,12 @@ function generateOrderReport(selIds) {
   const mailLines = filtered.map((o, i) => {
     const oDisp = orderTotalWithIva(o);
     const sapCalc2 = o.sapMode ? getSapCalcForOrder(o) : null;
-    const cmts = (o.comments&&o.comments.length?o.comments:(o.note?[o.note]:[])).filter(c=>c&&c.trim());
+    const cmts = (o.comments&&o.comments.length?o.comments:(o.note?[o.note]:[]));
     const cotLine = o.quote ? `Cot: ${o.quote}` : '';
     const ocLine  = o.oc    ? `OC ${o.oc}` : '';
-    const cmtLines = cmts.length ? `NOTAS:\n` + cmts.map(c => `• ${c}`).join('\n') : '';
-    const prodLines = sapCalc2 ? sapCalc2.items.map(r => {
-      const specLine = r.specLabel ? '\n('+r.specLabel+')' : '';
-      return '》'+r.qty+' '+r.name+specLine+'\nPrecio: '+Q(r.sapPriceNoIva)+'/'+r.sapUnitLabel+' + IVA';
-    }).join('\n') : o.items.map(it => {
-      const p = S.products.find(x=>x.id===(it.productId||Number(it.pid)));
-      const pr = (it.customPrice!=null)?it.customPrice:cliPrice(o.clientId,it.productId||it.pid,p?.basePrice||0);
-      const ul = p?.unitLabel||'unidad';
-      const specLbl = itemSpecLabel(it,p);
-      const specLine = specLbl ? '\n('+specLbl+')' : '';
-      const ivaText = o.applyIva ? ' + IVA' : '';
-      return '》'+it.qty+' '+(p?p.name:'—')+specLine+'\nPrecio: '+Q(pr)+'/'+ul+ivaText;
-    }).join('\n');
-    const bonusLines = sapCalc2 ? sapCalc2.bonusLines.map(r => {
-      const specLine = r.specLabel ? '\n('+r.specLabel+')' : '';
-      return r.qty+' '+r.name+specLine+'\nPrecio: '+Q(r.sapPriceNoIva)+'/'+r.sapUnitLabel+' + IVA';
-    }).join('\n') : (o.bonusLines||[]).map(bl => {
-      const p = S.products.find(x=>x.id===Number(bl.productId));
-      const ul = p?.unitLabel||'unidad';
-      const specLbl = itemSpecLabel(bl,p);
-      const specLine = specLbl ? '\n('+specLbl+')' : '';
-      const ivaTxtC = o.applyIva ? ' + IVA' : '';
-      return bl.qty+' '+(p?p.name:'—')+specLine+'\nPrecio: '+Q(bl.price||0)+'/'+ul+ivaTxtC;
-    }).join('\n');
-    const bonusBlock = bonusLines ? '》BONIFICACIÓN《\n'+bonusLines : '';
+    const cmtLines = notasBlockText(cmts);
+    const prodLines = orderProdLinesText(o, sapCalc2);
+    const bonusBlock = orderBonusBlockText(o, sapCalc2);
     const parts = ['#'+(i+1), o.clientName, cotLine, ocLine, cmtLines, '', prodLines];
     if (bonusBlock) { parts.push(''); parts.push(bonusBlock); }
     parts.push(''); parts.push('TOTAL: '+Q(oDisp));
@@ -3029,41 +2988,14 @@ if (!currentQuote) return;
 const ord = currentQuote;
 const sapCalc = ord.sapMode ? getSapCalcForOrder(ord) : null;
 
-// Productos con 》y precio
-const prodLines = sapCalc ? sapCalc.items.map(r => {
-  const specLine = r.specLabel ? `\n(${r.specLabel})` : '';
-  return `》${r.qty} ${r.name}${specLine}\nPrecio: ${Q(r.sapPriceNoIva)}/${r.sapUnitLabel} + IVA`;
-}).join('\n') : ord.items.map(it => {
-  const p  = S.products.find(x => x.id===(it.productId||Number(it.pid)));
-  const pr = (it.customPrice != null) ? it.customPrice : cliPrice(ord.clientId, it.productId||it.pid, p?.basePrice||0);
-  const ul = p?.unitLabel||'unidad';
-  const ivaText = ord.applyIva ? ' + IVA' : '';
-  const specLbl = itemSpecLabel(it,p);
-  const specLine = specLbl ? `\n(${specLbl})` : '';
-  return `》${it.qty} ${p?p.name:'—'}${specLine}\nPrecio: ${Q(pr)}/${ul}${ivaText}`;
-}).join('\n');
-
-// Bonificaciones
-const bonusLines = sapCalc ? sapCalc.bonusLines.map(r => {
-  const specLine = r.specLabel ? `\n(${r.specLabel})` : '';
-  const comment = r.ruleName ? `\n${r.ruleName}` : '';
-  return `${r.qty} ${r.name}${specLine}\nPrecio: ${Q(r.sapPriceNoIva)}/${r.sapUnitLabel} +IVA${comment}`;
-}).join('\n') : (ord.bonusLines||[]).map(bl => {
-  const p  = S.products.find(x => x.id===Number(bl.productId));
-  const ul = p?.unitLabel||'unidad';
-  const specLbl = itemSpecLabel(bl,p);
-  const specLine = specLbl ? `\n(${specLbl})` : '';
-  const ivaTxtB = ord.applyIva ? ' +IVA' : '';
-  const comment = bl.ruleName ? `\n${bl.ruleName}` : '';
-  return `${bl.qty} ${p?p.name:'—'}${specLine}\nPrecio: ${Q(bl.price||0)}/${ul}${ivaTxtB}${comment}`;
-}).join('\n');
-const bonusBlock = bonusLines ? `》BONIFICACIÓN《\n${bonusLines}` : '';
-
+// Productos y bonificación, mismas piezas que usa "Enviar seleccionados"
+const prodLines = orderProdLinesText(ord, sapCalc);
+const bonusBlock = orderBonusBlockText(ord, sapCalc);
 const totalFinal = orderTotalWithIva(ord, sapCalc);
 
 // Comentarios con etiqueta "NOTAS:" y bullet "• "
-const cmts = (ord.comments && ord.comments.length ? ord.comments : (ord.note ? [ord.note] : [])).filter(c=>c&&c.trim());
-const comentariosTexto = cmts.length ? `NOTAS:\n` + cmts.map(c => `• ${c}`).join('\n') : '';
+const cmts = (ord.comments && ord.comments.length ? ord.comments : (ord.note ? [ord.note] : []));
+const comentariosTexto = notasBlockText(cmts);
 
 const ocLine = ord.oc ? `OC ${ord.oc}` : '';
 const qNoteLine = ord.quoteNote ? `Fecha de entrega: ${fmtEntrega(ord.quoteNote)}` : '';
@@ -3116,11 +3048,9 @@ t += `\n`;
 t += `Cliente: *${ord.clientName}*\n`;
 
 // Comentarios normales
-const cmts = (ord.comments && ord.comments.length ? ord.comments : (ord.note ? [ord.note] : [])).filter(Boolean);
-if (cmts.length) {
-  t += `NOTAS:\n`;
-  cmts.forEach(c => { t += `• ${c}\n`; });
-}
+const cmts = ord.comments && ord.comments.length ? ord.comments : (ord.note ? [ord.note] : []);
+const notasTxt = notasBlockText(cmts);
+if (notasTxt) t += notasTxt + '\n';
 
 // Productos
 t += '\n';

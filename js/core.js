@@ -907,6 +907,51 @@ ${orderButtonsHtml(opt.buttons, opt.compact)}
 ${opt.extra || ''}`;
 }
 
+// ═══════════════════════════════════════════════════════════════════
+//  TEXTOS PARA COMPARTIR (WhatsApp/correo) — piezas compartidas.
+//  Las 4 funciones que arman estos textos (correo de 1 pedido, WhatsApp
+//  de cotización, y las 3 variantes de "Enviar seleccionados") tienen
+//  formatos y públicos distintos a propósito y NO se unifican en una
+//  sola función. Lo que sí estaba copiado igual en varios lugares son
+//  estas 3 piezas — y en 2 de esos lugares, sin darse cuenta del modo
+//  SAP (mostraban el precio real en vez del convertido). Quedan
+//  centralizadas aquí, ya corregidas.
+// ═══════════════════════════════════════════════════════════════════
+
+// Líneas de producto en el formato "》cant nombre\n(spec)\nPrecio: ...",
+// usado en el correo de un pedido y en "Enviar seleccionados".
+function orderProdLinesText(o, sapCalc) {
+  const sc = sapCalc !== undefined ? sapCalc : (o.sapMode ? getSapCalcForOrder(o) : null);
+  return orderLinesData(o, sc).map(l => {
+    const specLine = l.specLabel ? `\n(${l.specLabel})` : '';
+    const iva = l.ivaTag ? ' + IVA' : '';
+    return `》${l.qty} ${l.name}${specLine}\nPrecio: ${Q(l.price)}/${l.unit}${iva}`;
+  }).join('\n');
+}
+
+// Bloque "》BONIFICACIÓN《" con sus líneas, mismo formato que orderProdLinesText.
+//   opts.leadingNewline → agrega un salto de línea antes del título (según lo necesite quien llama)
+function orderBonusBlockText(o, sapCalc, opts) {
+  opts = opts || {};
+  const sc = sapCalc !== undefined ? sapCalc : (o.sapMode ? getSapCalcForOrder(o) : null);
+  const list = orderBonusData(o, sc);
+  if (!list.length) return '';
+  const lines = list.map(b => {
+    const specLine = b.specLabel ? `\n(${b.specLabel})` : '';
+    const iva = b.ivaTag ? ' +IVA' : '';
+    const comment = b.ruleName ? `\n${b.ruleName}` : '';
+    return `${b.qty} ${b.name}${specLine}\nPrecio: ${Q(b.price)}/${b.unit}${iva}${comment}`;
+  }).join('\n');
+  return `${opts.leadingNewline ? '\n' : ''}》BONIFICACIÓN《\n${lines}`;
+}
+
+// Bloque "NOTAS:\n• comentario" (sin salto de línea al final; quien llama
+// agrega el espaciado que le convenga alrededor).
+function notasBlockText(cmts) {
+  const list = (cmts || []).filter(c => c && String(c).trim());
+  return list.length ? `NOTAS:\n` + list.map(c => `• ${c}`).join('\n') : '';
+}
+
 // ── Modo SAP: cálculo compartido para mostrar un pedido convertido ─────
 // Un pedido marcado o.sapMode=true guarda sus datos reales intactos
 // (cantidad, precio con IVA, unidad de venta normal) — esta función NO
