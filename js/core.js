@@ -691,6 +691,119 @@ function fmtD(d) {
   return p.length===3 ? `${p[2]}/${p[1]}/${p[0]}` : d;
 }
 
+// ═══════════════════════════════════════════════════════════════════
+//  LÍNEAS DE PRODUCTO DE UN PEDIDO — un solo lugar para las 4 tarjetas
+//  (Pedidos, Ficha de cliente, Rutas, Buscador). Antes cada una repetía
+//  todo este cálculo y armado con pequeñas variaciones.
+//  1) orderLinesData / orderBonusData  → los DATOS de cada línea, ya
+//     resueltos (modo SAP o normal, especificación, precio, unidad).
+//  2) orderLinesHtml / orderBonusHtml  → el HTML, con un "preset" por
+//     vista que conserva su tamaño y espaciado propio.
+// ═══════════════════════════════════════════════════════════════════
+
+// Líneas de venta ya resueltas para mostrar. En modo SAP usa los valores
+// convertidos (sapCalc); si no, los reales del pedido.
+//   subtotal     = monto de la línea sin sumarle IVA
+//   totalWithIva = monto de la línea sumándole 12% si el pedido es "agregar IVA"
+function orderLinesData(o, sapCalc) {
+  if (sapCalc) return sapCalc.items.map(r => ({
+    qty: r.qty, name: r.name, specLabel: r.specLabel,
+    price: r.sapPriceNoIva, unit: r.sapUnitLabel,
+    subtotal: r.sapLineTotalWithIva, totalWithIva: r.sapLineTotalWithIva,
+    ivaTag: true, missing: false
+  }));
+  return (o.items || []).map(it => {
+    const p   = S.products.find(x => x.id === (it.productId || Number(it.pid)));
+    const pr  = (it.customPrice != null) ? it.customPrice : cliPrice(o.clientId, it.productId || it.pid, p?.basePrice || 0);
+    const sub = pr * it.qty * itemUnitSizeFor(it, p);
+    return {
+      qty: it.qty, name: p ? p.name : null, specLabel: itemSpecLabel(it, p),
+      price: pr, unit: p?.unitLabel || 'unidad',
+      subtotal: sub, totalWithIva: o.applyIva ? sub * 1.12 : sub,
+      ivaTag: !!o.applyIva, missing: !p
+    };
+  });
+}
+
+// Bonificaciones ya resueltas para mostrar (mismo criterio de modo SAP).
+function orderBonusData(o, sapCalc) {
+  if (!o.bonusLines || !o.bonusLines.length) return [];
+  if (sapCalc) return sapCalc.bonusLines.map(r => ({
+    qty: r.qty, name: r.name, specLabel: r.specLabel,
+    price: r.sapPriceNoIva, unit: r.sapUnitLabel, ivaTag: true
+  }));
+  return o.bonusLines.map(bl => {
+    const p = S.products.find(x => x.id === Number(bl.productId));
+    return {
+      qty: bl.qty, name: p ? p.name : '—', specLabel: itemSpecLabel(bl, p),
+      price: bl.price || 0, unit: p?.unitLabel || null, ivaTag: !!o.applyIva
+    };
+  });
+}
+
+// Cada vista conserva su propio tamaño/espaciado (densidad) con su preset.
+//   outer/row/total = estilos;  iva = estilo de la etiqueta "+IVA"
+//   amount  = 'withIva' (el monto de la línea incluye el 12%) o 'base' (sin sumarlo)
+//   missing = texto si el producto ya no existe (null = omitir la línea)
+const ORDER_LINE_PRESETS = {
+  pedidos:  { outer:'padding:3px 0;border-bottom:1px solid #1e2640', row:'display:flex;justify-content:space-between;align-items:baseline;gap:4px;font-size:12px', total:'', iva:'font-size:9px;color:#facc15',  amount:'withIva', missing:'Eliminado' },
+  cliente:  { outer:'padding:3px 0;border-bottom:1px solid #1e2640', row:'display:flex;justify-content:space-between;align-items:baseline;gap:4px;font-size:11px', total:'', iva:'color:#facc15;font-size:10px', amount:'base',    missing:null },
+  rutas:    { outer:'font-size:12px;padding:5px 0;border-bottom:1px solid #1e2640', row:'display:flex;justify-content:space-between;align-items:baseline;gap:6px', total:'', iva:'color:#facc15;font-size:10px', amount:'base',    missing:'—' },
+  buscador: { outer:'padding:2px 0;border-bottom:1px solid #1e2640', row:'display:flex;justify-content:space-between;font-size:11px', total:';margin-left:6px', iva:'color:#facc15;font-size:10px', amount:'base',    missing:null }
+};
+const ORDER_BONUS_PRESETS = {
+  pedidos:  { margin:'6px', header:'font-size:11px;color:#10b981;font-weight:700;margin-bottom:3px', box:true,  badge:true,  spanInner:true,  line:'display:flex;justify-content:space-between;font-size:11px;padding:2px 0;border-bottom:1px solid #1e2640', unitFallback:'unidad' },
+  cliente:  { margin:'4px', header:'font-size:11px;color:#10b981;font-weight:700;margin-bottom:3px', box:true,  badge:true,  spanInner:false, line:'font-size:11px;color:#f1f5f9;font-weight:600;padding:2px 0;border-bottom:1px solid #1e2640', unitFallback:'unidad' },
+  rutas:    { margin:'4px', header:'font-size:11px;color:#10b981;font-weight:700;margin-bottom:3px', box:true,  badge:false, spanInner:false, line:'font-size:11px;color:#f1f5f9;font-weight:600;padding:2px 0;border-bottom:1px solid #1e2640', unitFallback:'unidad' },
+  buscador: { margin:'4px', header:'font-size:10px;color:#10b981;font-weight:700', box:false, badge:false, spanInner:false, line:'font-size:11px;color:#f1f5f9', unitFallback:'u' }
+};
+
+// HTML de las líneas de venta de un pedido para la vista indicada.
+function orderLinesHtml(o, sapCalc, presetName) {
+  const P = ORDER_LINE_PRESETS[presetName];
+  return orderLinesData(o, sapCalc).map(l => {
+    if (l.missing && !P.missing) return '';
+    const name   = l.missing ? P.missing : l.name;
+    const iva    = l.ivaTag ? ` <span style="${P.iva}">+IVA</span>` : '';
+    const amount = (P.amount === 'withIva') ? l.totalWithIva : l.subtotal;
+    return `<div style="${P.outer}">
+<div style="${P.row}">
+  <span style="color:#f1f5f9;font-weight:600;flex:1;min-width:0">${l.qty} ${name} × ${Q(l.price)}/${l.unit}${iva}</span>
+  <span style="color:#f1f5f9;font-weight:700;flex-shrink:0${P.total}">${Q(amount)}</span>
+</div>
+${specTagLineHtml(l.specLabel)}
+</div>`;
+  }).join('');
+}
+
+// Insignia de la bonificación: ✅ Meta 100% / 🎗️ Excepcional / ⚠️ Sin verificar
+function bonusBadgeHtml(o) {
+  const allVerified    = o.bonusLines.every(bl => bl.fromRuleId != null);
+  const allExceptional = o.bonusLines.every(bl => bl.exceptional);
+  return allVerified
+    ? '<span style="font-size:9px;background:#052e16;color:#10b981;padding:1px 6px;border-radius:6px;font-weight:700;margin-left:6px">✅ Meta 100%</span>'
+    : allExceptional
+      ? '<span style="font-size:9px;background:#2a1f00;color:#f59e0b;padding:1px 6px;border-radius:6px;font-weight:700;margin-left:6px">🎗️ Excepcional</span>'
+      : '<span style="font-size:9px;background:#2d0f0f;color:#ef4444;padding:1px 6px;border-radius:6px;font-weight:700;margin-left:6px">⚠️ Sin verificar</span>';
+}
+
+// HTML del bloque "🎁 BONIFICACIÓN" de un pedido para la vista indicada.
+function orderBonusHtml(o, sapCalc, presetName) {
+  const list = orderBonusData(o, sapCalc);
+  if (!list.length) return '';
+  const P = ORDER_BONUS_PRESETS[presetName];
+  const lines = list.map(b => {
+    const spec = b.specLabel ? ` (${b.specLabel})` : '';
+    const iva  = b.ivaTag ? ` <span style="font-size:9px;color:#facc15">+IVA</span>` : '';
+    const text = `${b.qty} ${b.name}${spec} × ${Q(b.price)}/${b.unit || P.unitFallback}${iva}`;
+    return P.spanInner
+      ? `<div style="${P.line}"><span style="color:#f1f5f9;font-weight:600">${text}</span></div>`
+      : `<div style="${P.line}">${text}</div>`;
+  }).join('');
+  const head = `<div style="${P.header}">🎁 BONIFICACIÓN${P.badge ? bonusBadgeHtml(o) : ''}</div>`;
+  return `<div style="margin-top:${P.margin}">${head}${P.box ? `<div style="background:#0d0f18;border-radius:5px;padding:4px 6px">${lines}</div>` : lines}</div>`;
+}
+
 // ── Modo SAP: cálculo compartido para mostrar un pedido convertido ─────
 // Un pedido marcado o.sapMode=true guarda sus datos reales intactos
 // (cantidad, precio con IVA, unidad de venta normal) — esta función NO

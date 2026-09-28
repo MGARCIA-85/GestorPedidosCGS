@@ -2756,31 +2756,7 @@ body.innerHTML = '';
 filtered.forEach(o => {
 const tot   = orderTotal(o.items, o.clientId);
 const sapCalc = o.sapMode ? getSapCalcForOrder(o) : null;
-const lines = sapCalc ? sapCalc.items.map(r => {
-return `<div style="padding:3px 0;border-bottom:1px solid #1e2640">
-<div style="display:flex;justify-content:space-between;align-items:baseline;gap:4px;font-size:12px">
-  <span style="color:#f1f5f9;font-weight:600;flex:1;min-width:0">${r.qty} ${r.name} × ${Q(r.sapPriceNoIva)}/${r.sapUnitLabel} <span style="font-size:9px;color:#facc15">+IVA</span></span>
-  <span style="color:#f1f5f9;font-weight:700;flex-shrink:0">${Q(r.sapLineTotalWithIva)}</span>
-</div>
-${specTagLineHtml(r.specLabel)}
-</div>`;
-}).join('') : o.items.map(it => {
-const p      = S.products.find(x => x.id===it.productId);
-const pr     = (it.customPrice != null) ? it.customPrice : cliPrice(o.clientId, it.productId, p?.basePrice||0);
-const us     = itemUnitSizeFor(it, p);
-const ul     = p?.unitLabel||'unidad';
-const sub    = pr * it.qty * us;
-const lineDisplay = o.applyIva ? Q(sub*1.12) : Q(sub);
-const ivaLabel = o.applyIva ? ` <span style="font-size:9px;color:#facc15">+IVA</span>` : '';
-const nombre = p?p.name:'Eliminado';
-return `<div style="padding:3px 0;border-bottom:1px solid #1e2640">
-<div style="display:flex;justify-content:space-between;align-items:baseline;gap:4px;font-size:12px">
-  <span style="color:#f1f5f9;font-weight:600;flex:1;min-width:0">${it.qty} ${nombre} × ${Q(pr)}/${ul}${ivaLabel}</span>
-  <span style="color:#f1f5f9;font-weight:700;flex-shrink:0">${lineDisplay}</span>
-</div>
-${specTagLineHtml(itemSpecLabel(it,p))}
-</div>`;
-}).join('');
+const lines = orderLinesHtml(o, sapCalc, 'pedidos');
 const sCls = o.status==='Concluido'?'bp-fact':o.status==='Cotización'?'bp-quot':'bp-pend';
 const _blocked = isOrderBlocked(o);
 const swipeColor = _blocked?'#a855f7':o.status==='Concluido'?'#4ade80':o.status==='Confirmado'?'#60a5fa':'#f1f5f9';
@@ -2829,27 +2805,7 @@ ${(sapCalc||o.pricesIncIva||o.applyIva) ? '<span style=\"font-size:10px;font-wei
 ${sapCalc ? '<span style=\"font-size:10px;font-weight:700;color:#fff;background:#7c3aed;padding:1px 7px;border-radius:4px\">🧮 SAP</span>' : ''}
 <span class="${sCls}" style="margin-left:auto">${o.status}</span></div>
 </div>
-${(()=>{
-if (!o.bonusLines||!o.bonusLines.length) return '';
-const bLines = sapCalc ? sapCalc.bonusLines.map(r=>{
-  const spec = r.specLabel?` (${r.specLabel})`:'';
-  return `<div style="display:flex;justify-content:space-between;font-size:11px;padding:2px 0;border-bottom:1px solid #1e2640"><span style="color:#f1f5f9;font-weight:600">${r.qty} ${r.name}${spec} × ${Q(r.sapPriceNoIva)}/${r.sapUnitLabel} <span style="font-size:9px;color:#facc15">+IVA</span></span></div>`;
-}).join('') : o.bonusLines.map(bl=>{
-  const p = S.products.find(x=>x.id===Number(bl.productId));
-  const spec = p?.presentation?` (${p.presentation})`:'';
-  const ul = p?.unitLabel||'unidad';
-  const ivaLbl = o.applyIva ? ` <span style="font-size:9px;color:#facc15">+IVA</span>` : '';
-  return `<div style="display:flex;justify-content:space-between;font-size:11px;padding:2px 0;border-bottom:1px solid #1e2640"><span style="color:#f1f5f9;font-weight:600">${bl.qty} ${p?p.name:'—'}${spec} × ${Q(bl.price||0)}/${ul}${ivaLbl}</span></div>`;
-}).join('');
-const allVerified = o.bonusLines.every(bl => bl.fromRuleId != null);
-const allExceptional = o.bonusLines.every(bl => bl.exceptional);
-const bonusBadge = allVerified
-  ? '<span style="font-size:9px;background:#052e16;color:#10b981;padding:1px 6px;border-radius:6px;font-weight:700;margin-left:6px">✅ Meta 100%</span>'
-  : allExceptional
-    ? '<span style="font-size:9px;background:#2a1f00;color:#f59e0b;padding:1px 6px;border-radius:6px;font-weight:700;margin-left:6px">🎗️ Excepcional</span>'
-    : '<span style="font-size:9px;background:#2d0f0f;color:#ef4444;padding:1px 6px;border-radius:6px;font-weight:700;margin-left:6px">⚠️ Sin verificar</span>';
-return `<div style="margin-top:6px"><div style="font-size:11px;color:#10b981;font-weight:700;margin-bottom:3px">🎁 BONIFICACIÓN${bonusBadge}</div><div style="background:#0d0f18;border-radius:5px;padding:4px 6px">${bLines}</div></div>`;
-})()}
+${orderBonusHtml(o, sapCalc, 'pedidos')}
 <div class="two">
 <div style="display:flex;align-items:center;gap:8px;flex:1;background:#161929;border-radius:9px;padding:8px 12px;border:1px solid #2a3050">
   ${(()=>{

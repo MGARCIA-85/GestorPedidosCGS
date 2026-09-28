@@ -814,30 +814,7 @@ ${(()=>{
     const sapCalc = o.sapMode ? getSapCalcForOrder(o) : null;
     const disp = orderTotalWithIva(o, sapCalc);
     const sCls = o.cancelled?'#ef4444':isOrderBlocked(o)?'#a855f7':o.status==='Concluido'?'#4ade80':o.status==='Confirmado'?'#60a5fa':'#f1f5f9';
-    const itemsHtml = sapCalc ? sapCalc.items.map(r=>{
-      return `<div style="padding:3px 0;border-bottom:1px solid #1e2640">
-        <div style="display:flex;justify-content:space-between;align-items:baseline;gap:4px;font-size:11px">
-          <span style="color:#f1f5f9;font-weight:600;flex:1;min-width:0">${r.qty} ${r.name} × ${Q(r.sapPriceNoIva)}/${r.sapUnitLabel} <span style="color:#facc15;font-size:10px">+IVA</span></span>
-          <span style="color:#f1f5f9;font-weight:700;flex-shrink:0">${Q(r.sapLineTotalWithIva)}</span>
-        </div>
-        ${specTagLineHtml(r.specLabel)}
-      </div>`;
-    }).join('') : o.items.map(it=>{
-      const p = S.products.find(x=>x.id===it.productId);
-      if (!p) return '';
-      const pr = (it.customPrice!=null)?it.customPrice:cliPrice(o.clientId,it.productId,p.basePrice||0);
-      const ul = p.unitLabel||'unidad';
-      const us = itemUnitSizeFor(it, p);
-      const sub = pr*it.qty*us;
-      const iva = o.applyIva?` <span style="color:#facc15;font-size:10px">+IVA</span>`:'';
-      return `<div style="padding:3px 0;border-bottom:1px solid #1e2640">
-        <div style="display:flex;justify-content:space-between;align-items:baseline;gap:4px;font-size:11px">
-          <span style="color:#f1f5f9;font-weight:600;flex:1;min-width:0">${it.qty} ${p.name} × ${Q(pr)}/${ul}${iva}</span>
-          <span style="color:#f1f5f9;font-weight:700;flex-shrink:0">${Q(sub)}</span>
-        </div>
-        ${specTagLineHtml(itemSpecLabel(it,p))}
-      </div>`;
-    }).filter(Boolean).join('');
+    const itemsHtml = orderLinesHtml(o, sapCalc, 'cliente');
     const cotBtn = `<button onclick="openQuoteFromCli(${o.id})" style="flex:1;padding:5px 0;background:transparent;border:1px solid #3b82f6;border-radius:6px;color:#60a5fa;font-size:11px;cursor:pointer">📄 Cot.</button>`;
     const editBtn = `<button onclick="openEditFromCli(${o.id})" style="flex:1;padding:5px 0;background:transparent;border:1px solid #f59e0b;border-radius:6px;color:#f59e0b;font-size:11px;cursor:pointer">✏️ Editar</button>`;
     const duplBtn = `<button onclick="openDuplFromCli(${o.id})" style="flex:1;padding:5px 0;background:transparent;border:1px solid #a855f7;border-radius:6px;color:#a855f7;font-size:11px;cursor:pointer">📋 Dupl.</button>`;
@@ -867,27 +844,7 @@ ${(()=>{
         <button onclick="openSalesforceModal(${o.id})" style="background:#0f1e3a;border:1px solid #3b82f6;border-radius:6px;color:#60a5fa;font-size:10px;font-weight:700;padding:3px 8px;cursor:pointer;white-space:nowrap">☁️ Salesforce</button>
       </div>
       ${(o.comments&&o.comments.length)?o.comments.filter(Boolean).map(cm=>`<div style="font-size:11px;color:#f97316;font-style:italic;margin-bottom:3px">💬 ${cm}</div>`).join(''):''}
-      ${(()=>{
-        if (!o.bonusLines||!o.bonusLines.length) return '';
-        const bLines = sapCalc ? sapCalc.bonusLines.map(r=>{
-          const spec = r.specLabel?` (${r.specLabel})`:'';
-          return `<div style="font-size:11px;color:#f1f5f9;font-weight:600;padding:2px 0;border-bottom:1px solid #1e2640">${r.qty} ${r.name}${spec} × ${Q(r.sapPriceNoIva)}/${r.sapUnitLabel} <span style="font-size:9px;color:#facc15">+IVA</span></div>`;
-        }).join('') : o.bonusLines.map(bl=>{
-          const p = S.products.find(x=>x.id===Number(bl.productId));
-          const spec = p?.presentation?` (${p.presentation})`:'';
-          const ul = p?.unitLabel||'unidad';
-          const ivaLbl = o.applyIva ? ` <span style="font-size:9px;color:#facc15">+IVA</span>` : '';
-          return `<div style="font-size:11px;color:#f1f5f9;font-weight:600;padding:2px 0;border-bottom:1px solid #1e2640">${bl.qty} ${p?p.name:'—'}${spec} × ${Q(bl.price||0)}/${ul}${ivaLbl}</div>`;
-        }).join('');
-        const allVerified2 = o.bonusLines.every(bl => bl.fromRuleId != null);
-        const allExceptional2 = o.bonusLines.every(bl => bl.exceptional);
-        const bonusBadge2 = allVerified2
-          ? '<span style="font-size:9px;background:#052e16;color:#10b981;padding:1px 6px;border-radius:6px;font-weight:700;margin-left:6px">✅ Meta 100%</span>'
-          : allExceptional2
-            ? '<span style="font-size:9px;background:#2a1f00;color:#f59e0b;padding:1px 6px;border-radius:6px;font-weight:700;margin-left:6px">🎗️ Excepcional</span>'
-            : '<span style="font-size:9px;background:#2d0f0f;color:#ef4444;padding:1px 6px;border-radius:6px;font-weight:700;margin-left:6px">⚠️ Sin verificar</span>';
-        return `<div style="margin-top:4px"><div style="font-size:11px;color:#10b981;font-weight:700;margin-bottom:3px">🎁 BONIFICACIÓN${bonusBadge2}</div><div style="background:#0d0f18;border-radius:5px;padding:4px 6px">${bLines}</div></div>`;
-      })()}
+      ${orderBonusHtml(o, sapCalc, 'cliente')}
       <div style="display:flex;gap:5px;margin-top:4px">${cotBtn}${editBtn}${duplBtn}${delBtn}</div>
       ${reactBtn}
     </div>`;
