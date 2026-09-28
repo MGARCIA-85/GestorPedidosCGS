@@ -811,9 +811,8 @@ ${(()=>{
   if (!cliOrds.length) return '';
   const rows_map = {};
   cliOrds.forEach(o=>{
-    const tot = orderTotal(o.items,o.clientId);
     const sapCalc = o.sapMode ? getSapCalcForOrder(o) : null;
-    const disp = sapCalc ? sapCalc.totalConIva : (o.applyIva?tot*1.12:tot);
+    const disp = orderTotalWithIva(o, sapCalc);
     const sCls = o.cancelled?'#ef4444':isOrderBlocked(o)?'#a855f7':o.status==='Concluido'?'#4ade80':o.status==='Confirmado'?'#60a5fa':'#f1f5f9';
     const itemsHtml = sapCalc ? sapCalc.items.map(r=>{
       return `<div style="padding:3px 0;border-bottom:1px solid #1e2640">

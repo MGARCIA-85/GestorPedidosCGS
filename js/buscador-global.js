@@ -196,9 +196,8 @@ function runGlobalSearch() {
   if (ords.length) {
     html += `<div style="padding:5px 12px;font-size:10px;color:#64748b;font-weight:700;text-transform:uppercase;background:#161929;letter-spacing:.5px">📋 Pedidos (${ords.length})</div>`;
     html += ords.map(x => {
-      const tot  = orderTotal(x.items,x.clientId);
       const sapCalc = x.sapMode ? getSapCalcForOrder(x) : null;
-      const disp = sapCalc ? sapCalc.totalConIva : (x.applyIva ? tot*1.12 : tot);
+      const disp = orderTotalWithIva(x, sapCalc);
       const sc   = x.status==='Concluido'?'#4ade80':x.status==='Cotización'?'#60a5fa':'#fb923c';
       const route = x.routeId ? (S.routes||[]).find(r=>r.id===x.routeId) : null;
       const itemsHtml = sapCalc ? sapCalc.items.map(r=>{
@@ -254,7 +253,7 @@ function runGlobalSearch() {
     html += `<div style="padding:5px 12px;font-size:10px;color:#64748b;font-weight:700;text-transform:uppercase;background:#161929;letter-spacing:.5px">🚚 Rutas</div>`;
     html += rts.slice(0,5).map(x => {
       const tot = (x.orders||[]).map(id=>S.orders.find(o=>o.id===id)).filter(Boolean)
-        .reduce((s,o)=>{const b=orderTotal(o.items,o.clientId);return s+(o.applyIva?b*1.12:b);},0);
+        .reduce((s,o)=>s+orderTotalWithIva(o),0);
       return `<div class="gs-opt" onclick="gsGoRoute(${x.id})">
         <div style="font-weight:700;color:#f59e0b">🚚 ${hl(x.name)}</div>
         ${x.desc?`<div style="font-size:11px;color:#64748b">${x.desc}</div>`:''}

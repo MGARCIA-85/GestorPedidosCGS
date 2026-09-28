@@ -170,17 +170,13 @@ function renderRoutes() {
       : orderedOrders;
     const pend   = orders.filter(o=>o.status==='Confirmado').length;
     const fact   = orders.filter(o=>o.status==='Concluido').length;
-    const tot    = orders.reduce((s,o)=>{
-      if (o.sapMode) { const sc = getSapCalcForOrder(o); return s + (sc ? sc.totalConIva : 0); }
-      const b=orderTotal(o.items,o.clientId);return s+(o.applyIva?b*1.12:b);
-    },0);
+    const tot    = orders.reduce((s,o)=>s+orderTotalWithIva(o),0);
     const isOpen   = !!window._routeOpen[r.id];
     const isPinned = (S.pinnedRoutes||[]).includes(r.id);
 
     const ordRows = filteredOrders.length ? filteredOrders.map((o, rIdx) => {
-      const oTot = orderTotal(o.items,o.clientId);
       const sapCalc = o.sapMode ? getSapCalcForOrder(o) : null;
-      const oDisp = sapCalc ? sapCalc.totalConIva : (o.applyIva ? oTot*1.12 : oTot);
+      const oDisp = orderTotalWithIva(o, sapCalc);
       const statusColor = isOrderBlocked(o)?'#a855f7':o.status==='Concluido'?'#4ade80':o.status==='Confirmado'?'#60a5fa':'#f1f5f9';
       const items = o.items.map(it=>{
         const p=S.products.find(x=>x.id===(it.productId||Number(it.pid)));
@@ -672,7 +668,7 @@ function updateRouteSelBar() {
   document.getElementById('route-sel-count').textContent = n + ' pedido' + (n!==1?'s':'') + ' seleccionado' + (n!==1?'s':'');
   // Resumen
   const selOrds = allSel.map(id => S.orders.find(o=>o.id===id)).filter(Boolean);
-  const total = selOrds.reduce((s,o)=>{ const t=orderTotal(o.items,o.clientId); return s+(o.applyIva?t*1.12:t); },0);
+  const total = selOrds.reduce((s,o)=>s+orderTotalWithIva(o),0);
   const prods = {};
   selOrds.forEach(o => o.items.forEach(it => {
     const p = S.products.find(x=>x.id===(it.productId||Number(it.pid)));
@@ -889,18 +885,12 @@ function generateRouteReport(rid, selIds, returnHTML=false) {
     orders.sort((a,b) => _cmp(a,b,rSort1) || _cmp(a,b,rSort2) || _cmp(a,b,rSort3));
   }
   const b = S.biz;
-  // Total con IVA por pedido: si está en modo SAP, usa el convertido.
-  function _ordDispTotal(o) {
-    if (o.sapMode) { const sc = getSapCalcForOrder(o); return sc ? sc.totalConIva : 0; }
-    const bv = orderTotal(o.items, o.clientId);
-    return o.applyIva ? bv*1.12 : bv;
-  }
-  const tDisp = orders.reduce((s,o)=>s+_ordDispTotal(o),0);
-  const tPend = orders.filter(o=>o.status==='Confirmado').reduce((s,o)=>s+_ordDispTotal(o),0);
-  const tFact = orders.filter(o=>o.status==='Concluido').reduce((s,o)=>s+_ordDispTotal(o),0);
+  const tDisp = orders.reduce((s,o)=>s+orderTotalWithIva(o),0);
+  const tPend = orders.filter(o=>o.status==='Confirmado').reduce((s,o)=>s+orderTotalWithIva(o),0);
+  const tFact = orders.filter(o=>o.status==='Concluido').reduce((s,o)=>s+orderTotalWithIva(o),0);
 
   const rows = orders.map((o, rIdx) => {
-    const disp = _ordDispTotal(o);
+    const disp = orderTotalWithIva(o);
     const sapCalc = o.sapMode ? getSapCalcForOrder(o) : null;
     const items = sapCalc ? sapCalc.items.map(r => `<tr>
         <td style="padding:5px 8px">${r.name}${r.specLabel?` <span style="color:#374151">(${r.specLabel})</span>`:''}</td>
@@ -1393,7 +1383,7 @@ function removeOrderFromRoute(oid, rid) {
   const _o = S.orders.find(x=>x.id===oid);
   const _cliName = _o ? _o.clientName : '—';
   const _prodDesc = _o ? _o.items.map(it=>{const p=S.products.find(x=>x.id===(it.productId||Number(it.pid)));return (p?p.name:'—')+' ×'+it.qty;}).join(', ') : '';
-  const _tot = _o ? Q(_o.applyIva ? orderTotal(_o.items,_o.clientId)*1.12 : orderTotal(_o.items,_o.clientId)) : '';
+  const _tot = _o ? Q(orderTotalWithIva(_o)) : '';
   inner.innerHTML = `
     <div style="font-size:28px;margin-bottom:8px">📦</div>
     <div style="font-size:15px;font-weight:700;color:#f1f5f9;margin-bottom:4px">Quitar pedido de la ruta</div>

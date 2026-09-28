@@ -406,6 +406,23 @@ function orderTotal(items, cid) {
 return items.reduce((s, it) => s + lineTotal(cid, it.productId||it.pid, it.qty, it.customPrice != null ? it.customPrice : null, it.specId, it.specUnitSize), 0);
 }
 
+// Total de un pedido CON IVA, tal como se debe mostrar y cobrar. Es el
+// único lugar donde se decide esto (antes se repetía a mano en ~16 sitios):
+//  - modo SAP: el total recalculado con precios sin IVA truncados
+//  - "los precios ya incluyen IVA": el total tal cual
+//  - "agregar IVA": el total + 12%
+//  - sin IVA: el total tal cual
+// Si quien llama ya calculó getSapCalcForOrder(o), puede pasarlo (sapCalc)
+// para no calcularlo dos veces.
+function orderTotalWithIva(o, sapCalc) {
+  if (!o) return 0;
+  const sc = sapCalc !== undefined ? sapCalc : (o.sapMode ? getSapCalcForOrder(o) : null);
+  if (sc) return sc.totalConIva;
+  const t = orderTotal(o.items || [], o.clientId);
+  if (o.pricesIncIva) return t;
+  return o.applyIva ? t * 1.12 : t;
+}
+
 // Congela el precio de cualquier pedido guardado que aún no lo tenga
 // (pedidos de antes de que el precio quedara "congelado" por línea).
 // Sin esto, esas líneas leían el precio de lista EN VIVO, así que

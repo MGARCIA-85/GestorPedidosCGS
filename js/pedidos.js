@@ -33,8 +33,7 @@ function renderQuotesList() {
   }
   const sorted = [...quotes].sort((a,b)=>ordDateTs(b)-ordDateTs(a));
   body.innerHTML = sorted.map(o => {
-    const total = orderTotal(o.items, o.clientId);
-    const disp = o.applyIva ? total*1.12 : total;
+    const disp = orderTotalWithIva(o);
     const sCls = o.cancelled?'#ef4444':o.status==='Concluido'?'#4ade80':o.status==='Confirmado'?'#60a5fa':'#f1f5f9';
     return `<div style="background:#161929;border-radius:10px;padding:12px;margin-bottom:10px;border-left:3px solid ${sCls}">
       <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px">
@@ -2042,7 +2041,7 @@ function updateOrdSelBar() {
   document.getElementById('ord-sel-count').textContent = n + ' pedido' + (n!==1?'s':'') + ' seleccionado' + (n!==1?'s':'');
   // Resumen: total y clientes
   const selOrds = [...(window._ordSel)].map(id => S.orders.find(o=>o.id===id)).filter(Boolean);
-  const total = selOrds.reduce((s,o)=>{ const t=orderTotal(o.items,o.clientId); return s+(o.applyIva?t*1.12:t); },0);
+  const total = selOrds.reduce((s,o)=>s+orderTotalWithIva(o),0);
   const prods = {};
   selOrds.forEach(o => o.items.forEach(it => {
     const p = S.products.find(x=>x.id===(it.productId||Number(it.pid)));
@@ -2170,8 +2169,7 @@ function shareOrderReportSel() {
 
   // Helper: total de un pedido
   function getTotal(o) {
-    const t = orderTotal(o.items, o.clientId);
-    return o.applyIva ? t*1.12 : t;
+    return orderTotalWithIva(o);
   }
 
   const uniqueClients = [...new Set(filtered.map(o => o.clientId))];
@@ -2298,14 +2296,7 @@ function generateOrderReport(selIds) {
   const defaultTitle = fCli ? `Informe: ${fCli}` : 'Informe de Pedidos';
   const title = prompt('Título del informe (también será el nombre del archivo):', defaultTitle) || defaultTitle;
   const periodo = (fFrom||fTo) ? `${fFrom||'inicio'} → ${fTo||'hoy'}` : fmtOrdDate((()=>{ const n=new Date(); return `${String(n.getDate()).padStart(2,'0')}/${String(n.getMonth()+1).padStart(2,'0')}/${n.getFullYear()}`; })());
-  // Total con IVA a mostrar por pedido: si está en modo SAP, usa el total
-  // convertido (kg + precio sin IVA truncado); si no, el total normal.
-  function _ordDispTotal(o) {
-    if (o.sapMode) { const sc = getSapCalcForOrder(o); return sc ? sc.totalConIva : 0; }
-    const t = orderTotal(o.items, o.clientId);
-    return o.applyIva ? t*1.12 : t;
-  }
-  const tot = filtered.reduce((s,o)=>s+_ordDispTotal(o),0);
+  const tot = filtered.reduce((s,o)=>s+orderTotalWithIva(o),0);
 
   // Resumen de productos
   const prodTotals = {};
@@ -2326,7 +2317,7 @@ function generateOrderReport(selIds) {
 
   // Filas de pedidos
   const rows = filtered.map((o,i)=>{
-    const oDisp = _ordDispTotal(o);
+    const oDisp = orderTotalWithIva(o);
     const sapCalc = o.sapMode ? getSapCalcForOrder(o) : null;
     const prods = sapCalc ? sapCalc.items.map(r=>`<tr><td style="padding:5px 8px;font-size:12px">${r.name}${r.specLabel?` <span style="color:#374151">(${r.specLabel})</span>`:''}</td>
         <td style="padding:5px 8px;text-align:center;font-size:12px">${r.qty}</td>
@@ -2391,7 +2382,7 @@ function generateOrderReport(selIds) {
   const logoHtml = b.logoData ? `<img src="${b.logoData}" style="width:50px;height:50px;border-radius:8px;object-fit:cover"/>` : `<div style="font-size:28px">${b.emoji||'📦'}</div>`;
   // Generar texto del correo (debe ir antes del template html)
   const mailLines = filtered.map((o, i) => {
-    const oDisp = _ordDispTotal(o);
+    const oDisp = orderTotalWithIva(o);
     const sapCalc2 = o.sapMode ? getSapCalcForOrder(o) : null;
     const cmts = (o.comments&&o.comments.length?o.comments:(o.note?[o.note]:[])).filter(c=>c&&c.trim());
     const cotLine = o.quote ? `Cot: ${o.quote}` : '';
@@ -2429,8 +2420,8 @@ function generateOrderReport(selIds) {
   const mailBody = 'Buen día, por favor facturar:\n\n' + mailLines;
   const mailSubject = title;
 
-  const tPend = filtered.filter(o=>o.status==='Confirmado').reduce((s,o)=>s+_ordDispTotal(o),0);
-  const tFact = filtered.filter(o=>o.status==='Concluido').reduce((s,o)=>s+_ordDispTotal(o),0);
+  const tPend = filtered.filter(o=>o.status==='Confirmado').reduce((s,o)=>s+orderTotalWithIva(o),0);
+  const tFact = filtered.filter(o=>o.status==='Concluido').reduce((s,o)=>s+orderTotalWithIva(o),0);
 
   const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>${title}</title>
   <style>*{box-sizing:border-box}body{font-family:Arial,sans-serif;margin:0;padding:14px;color:#111;font-size:17px}
@@ -2833,7 +2824,7 @@ if(o.pricesIncIva) return '<div style=\"font-size:11px;color:#64748b;margin-bott
 if(o.applyIva)    return '<div style=\"font-size:11px;color:#64748b;margin-bottom:2px\">Subtotal: '+Q(tot)+' &nbsp;+&nbsp; IVA 12%: '+Q(tot*0.12)+'</div>';
 return '';
 })()}
-<div style="font-weight:800;font-size:15px;color:#f1f5f9;display:flex;align-items:center;gap:6px;flex-wrap:wrap">TOTAL ${Q(sapCalc ? sapCalc.totalConIva : (o.pricesIncIva ? tot : o.applyIva ? tot*1.12 : tot))}
+<div style="font-weight:800;font-size:15px;color:#f1f5f9;display:flex;align-items:center;gap:6px;flex-wrap:wrap">TOTAL ${Q(orderTotalWithIva(o, sapCalc))}
 ${(sapCalc||o.pricesIncIva||o.applyIva) ? '<span style=\"font-size:10px;font-weight:600;color:#facc15;background:#1e3a5f;padding:1px 6px;border-radius:4px\">IVA incl.</span>' : ''}
 ${sapCalc ? '<span style=\"font-size:10px;font-weight:700;color:#fff;background:#7c3aed;padding:1px 7px;border-radius:4px\">🧮 SAP</span>' : ''}
 <span class="${sCls}" style="margin-left:auto">${o.status}</span></div>
@@ -2952,7 +2943,7 @@ function delOrder(id) {
     const p = S.products.find(x=>x.id===(it.productId||Number(it.pid)));
     return (p?p.name:'—') + ' ×' + it.qty;
   }).join(', ') : '';
-  const tot = o ? Q(o.applyIva ? orderTotal(o.items,o.clientId)*1.12 : orderTotal(o.items,o.clientId)) : '';
+  const tot = o ? Q(orderTotalWithIva(o)) : '';
   const inner = document.querySelector('#confirm-modal > div');
   if (!inner) return;
   inner.innerHTML = `
@@ -3082,7 +3073,7 @@ ${cmtsQuote}
 </tr></thead>
 <tbody>${rows}${bonusSepQ}${bonusRows}</tbody>
 </table>
-<div class="qt-total">TOTAL: <span style="color:#b45309">${Q(sapCalc ? sapCalc.totalConIva : (ord.pricesIncIva ? tot : ord.applyIva ? tot*1.12 : tot))}</span></div>
+<div class="qt-total">TOTAL: <span style="color:#b45309">${Q(orderTotalWithIva(ord, sapCalc))}</span></div>
 ${(()=>{
 if(sapCalc) return '<div style=\"font-size:11px;color:#6b7280;text-align:right;margin-top:4px;padding-top:4px\">Subtotal (SAP, sin IVA): '+Q(sapCalc.subtotalSinIva)+' &nbsp;+&nbsp; IVA 12%: '+Q(sapCalc.ivaMonto)+'</div>';
 if(ord.pricesIncIva) return '<div style=\"font-size:11px;color:#6b7280;text-align:right;margin-top:4px;padding-top:4px\">Precio incluye IVA &nbsp;·&nbsp; Base: '+Q(tot/1.12)+' &nbsp;+&nbsp; IVA 12%: '+Q(tot-tot/1.12)+'</div>';
@@ -3207,8 +3198,7 @@ const bonusLines = sapCalc ? sapCalc.bonusLines.map(r => {
 }).join('\n');
 const bonusBlock = bonusLines ? `》BONIFICACIÓN《\n${bonusLines}` : '';
 
-const tot = orderTotal(ord.items, ord.clientId);
-const totalFinal = sapCalc ? sapCalc.totalConIva : (ord.applyIva ? tot*1.12 : tot);
+const totalFinal = orderTotalWithIva(ord, sapCalc);
 
 // Comentarios con etiqueta "NOTAS:" y bullet "• "
 const cmts = (ord.comments && ord.comments.length ? ord.comments : (ord.note ? [ord.note] : [])).filter(c=>c&&c.trim());
@@ -3246,7 +3236,6 @@ location.href = 'whatsapp://send?text=' + encodeURIComponent(text);
 
 function buildQuoteText(ord) {
 const b   = S.biz;
-const tot = orderTotal(ord.items, ord.clientId);
 const sapCalc = ord.sapMode ? getSapCalcForOrder(ord) : null;
 const qNum = ord.quote || '';
 const fechaSolo = (ord.date||'').split(',')[0];
@@ -3294,7 +3283,7 @@ if (sapCalc) {
 }
 
 // Total
-const totalFinal = sapCalc ? sapCalc.totalConIva : (ord.applyIva ? tot*1.12 : tot);
+const totalFinal = orderTotalWithIva(ord, sapCalc);
 const ivaLabel = (sapCalc || ord.applyIva) ? ' _(IVA incluido)_' : '';
 t += `\n*TOTAL: ${Q(totalFinal)}*${ivaLabel}\n`;
 
