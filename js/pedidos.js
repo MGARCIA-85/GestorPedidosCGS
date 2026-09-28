@@ -2193,7 +2193,8 @@ function shareOrderReportSel() {
         const deliveryLine = (!sameDelivery && o.delivery) ? `Entrega: ${o.delivery}\n` : '';
         const prodLines = getProdLines(o);
         const bonusBlock = getBonusBlock(o);
-        return `Pedido #${i+1}\n${cotLine}${ocLine}${qNoteLine}${deliveryLine}${prodLines}\nTOTAL: ${Q(getTotal(o))}${bonusBlock}`;
+        const ivaTag1 = (o.sapMode || o.pricesIncIva || o.applyIva) ? ' (IVA incluido)' : '';
+        return `Pedido #${i+1}\n${cotLine}${ocLine}${qNoteLine}${deliveryLine}${prodLines}\nTOTAL: ${Q(getTotal(o))}${ivaTag1}${bonusBlock}`;
       }).join('\n\n');
 
       body = `Buen día, por favor facturar y coordinar despacho.\n\n${sharedQNote}${sharedDelivery}${cmtBlock}${pedidoLines}`;
@@ -2225,7 +2226,8 @@ function shareOrderReportSel() {
         const cmtBlock = _notas3 ? _notas3 + '\n\n' : '';
         const prodLines = getProdLines(o);
         const bonusBlock = getBonusBlock(o);
-        return `Pedido #${i+1}\n${cotLine}${ocLine}${qNoteLine}${deliveryLine}${cmtBlock}${prodLines}\nTOTAL: ${Q(getTotal(o))}${bonusBlock}`;
+        const ivaTag2 = (o.sapMode || o.pricesIncIva || o.applyIva) ? ' (IVA incluido)' : '';
+        return `Pedido #${i+1}\n${cotLine}${ocLine}${qNoteLine}${deliveryLine}${cmtBlock}${prodLines}\nTOTAL: ${Q(getTotal(o))}${ivaTag2}${bonusBlock}`;
       }).join('\n\n');
 
       body = `Buen día, por favor facturar y coordinar despacho.\n\n${sharedQNote2}${sharedDelivery2}${commonBlock}${pedidoLines}`;
@@ -2248,7 +2250,8 @@ function shareOrderReportSel() {
       let t = [`Pedido #${i+1}`, idLine, cotLine, ocLine, qNoteLine3, deliveryLine].filter(Boolean).join('\n');
       if (cmtLines) t += '\n' + cmtLines + '\n\n'; else t += '\n';
       t += prodLines;
-      t += '\n' + `TOTAL: ${Q(getTotal(o))}`;
+      const ivaTag3 = (o.sapMode || o.pricesIncIva || o.applyIva) ? ' (IVA incluido)' : '';
+      t += '\n' + `TOTAL: ${Q(getTotal(o))}${ivaTag3}`;
       if (bonusBlock) t += '\n\n' + bonusBlock;
       return t;
     }).join('\n\n');
@@ -2338,7 +2341,7 @@ function generateOrderReport(selIds) {
         <thead><tr style="background:#f3f4f6"><th style="padding:5px 8px;text-align:left;font-size:12px">Producto</th><th style="padding:5px 8px;font-size:12px">Cant.</th><th style="padding:5px 8px;font-size:12px">P/Unidad</th><th style="padding:5px 8px;font-size:12px">Subtotal</th></tr></thead>
         <tbody>${prods}${bonusSeparator}${bonusRowsHtml}</tbody>
       </table>
-      <div style="text-align:right;padding:6px 12px;font-weight:800;font-size:13px;border-top:2px solid #111">TOTAL: ${Q(oDisp)}</div>
+      <div style="text-align:right;padding:6px 12px;font-weight:800;font-size:13px;border-top:2px solid #111">TOTAL: ${Q(oDisp)}${(sapCalc||o.pricesIncIva||o.applyIva)?'<span style="font-size:10px;font-weight:400;color:#6b7280;margin-left:5px">(IVA incl.)</span>':''}</div>
     </div>`;
   }).join('');
 
@@ -2355,7 +2358,8 @@ function generateOrderReport(selIds) {
     const bonusBlock = orderBonusBlockText(o, sapCalc2);
     const parts = ['#'+(i+1), o.clientName, cotLine, ocLine, cmtLines, '', prodLines];
     if (bonusBlock) { parts.push(''); parts.push(bonusBlock); }
-    parts.push(''); parts.push('TOTAL: '+Q(oDisp));
+    const ivaTagMail = (sapCalc2||o.pricesIncIva||o.applyIva) ? ' (IVA incluido)' : '';
+    parts.push(''); parts.push('TOTAL: '+Q(oDisp)+ivaTagMail);
     return parts.filter(l=>l!==null&&l!==undefined).join('\n');
   }).join('\n\n');
   const mailBody = 'Buen día, por favor facturar:\n\n' + mailLines;
@@ -2893,7 +2897,7 @@ ${cmtsQuote}
 </tr></thead>
 <tbody>${rows}${bonusSepQ}${bonusRows}</tbody>
 </table>
-<div class="qt-total">TOTAL: <span style="color:#b45309">${Q(orderTotalWithIva(ord, sapCalc))}</span></div>
+<div class="qt-total">TOTAL: <span style="color:#b45309">${Q(orderTotalWithIva(ord, sapCalc))}</span>${(sapCalc||ord.pricesIncIva||ord.applyIva)?'<span style="font-size:11px;font-weight:400;color:#6b7280;margin-left:6px">(IVA incluido)</span>':''}</div>
 ${(()=>{
 if(sapCalc) return '<div style=\"font-size:11px;color:#6b7280;text-align:right;margin-top:4px;padding-top:4px\">Subtotal (SAP, sin IVA): '+Q(sapCalc.subtotalSinIva)+' &nbsp;+&nbsp; IVA 12%: '+Q(sapCalc.ivaMonto)+'</div>';
 if(ord.pricesIncIva) return '<div style=\"font-size:11px;color:#6b7280;text-align:right;margin-top:4px;padding-top:4px\">Precio incluye IVA &nbsp;·&nbsp; Base: '+Q(tot/1.12)+' &nbsp;+&nbsp; IVA 12%: '+Q(tot-tot/1.12)+'</div>';
@@ -3005,7 +3009,8 @@ let t = [ocLine, qNoteLine, deliveryLine].filter(Boolean).join('\n');
 if (comentariosTexto) t += (t ? '\n' : '') + comentariosTexto + '\n\n';
 else t += (t ? '\n' : '');
 t += prodLines;
-t += '\n' + `TOTAL: ${Q(totalFinal)}`;
+const ivaTagFinal = (sapCalc || ord.pricesIncIva || ord.applyIva) ? ' (IVA incluido)' : '';
+t += '\n' + `TOTAL: ${Q(totalFinal)}${ivaTagFinal}`;
 if (bonusBlock) t += '\n\n' + bonusBlock;
 
 const body = `Buen día, por favor facturar:\n\n${t}`;
