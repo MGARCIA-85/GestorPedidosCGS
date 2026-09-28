@@ -197,30 +197,17 @@ function runGlobalSearch() {
     html += `<div style="padding:5px 12px;font-size:10px;color:#64748b;font-weight:700;text-transform:uppercase;background:#161929;letter-spacing:.5px">📋 Pedidos (${ords.length})</div>`;
     html += ords.map(x => {
       const sapCalc = x.sapMode ? getSapCalcForOrder(x) : null;
-      const disp = orderTotalWithIva(x, sapCalc);
       const sc   = x.status==='Concluido'?'#4ade80':x.status==='Cotización'?'#60a5fa':'#fb923c';
       const route = x.routeId ? (S.routes||[]).find(r=>r.id===x.routeId) : null;
-      const itemsHtml = orderLinesHtml(x, sapCalc, 'buscador');
-      const bonusHtml = orderBonusHtml(x, sapCalc, 'buscador');
       return `<div class="gs-opt" onclick="gsGoOrder(${x.id})">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">
-          <span style="font-weight:700;${(()=>{const cc=S.clients.find(cl=>cl.id===x.clientId);return cc?priorityNameStyle(cc.priority,'#f1f5f9'):'color:#f1f5f9;';})()}font-size:13px">${hl(x.clientName)}</span>
-          <div style="display:flex;align-items:center;gap:4px">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:4px">
+          <div>${orderInfoHtml(x, {showName:true, link:false, nameSize:13, delivery:true, hl})}</div>
+          <div style="display:flex;align-items:center;gap:4px;flex-shrink:0">
             ${route?`<span style="font-size:10px;color:#f59e0b;font-weight:700">(RUTA)</span>`:''}
             <span style="font-size:10px;color:${sc};font-weight:700;border:1px solid ${sc};padding:0 5px;border-radius:8px">${x.status}</span>
           </div>
         </div>
-        <div style="font-size:11px;color:#64748b;margin-bottom:3px">${x.date.split(',')[0]}${x.quote?' · Cot: <strong style="color:#2dd4bf">'+hl(x.quote)+'</strong>':''}${x.oc?' · OC: <strong style="color:#818cf8">'+hl(x.oc)+'</strong>':''}</div>
-        ${x.delivery?`<div style="font-size:11px;color:#3b82f6;font-weight:600;margin-bottom:3px">📍 ${x.delivery}</div>`:''}
-        ${x.quoteNote?`<div style="font-size:11px;color:#38bdf8;font-weight:700;margin-bottom:4px">📅 Fecha de entrega: ${fmtEntrega(x.quoteNote)}</div>`:''}
-        <div style="background:#0d0f18;border-radius:5px;padding:4px 6px;margin-bottom:4px">${itemsHtml}</div>
-        <div style="display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:3px">
-          <span style="font-size:13px;font-weight:700;color:#f1f5f9">TOTAL ${Q(disp)}</span>
-          ${sapCalc?'<span style="font-size:9px;font-weight:700;color:#fff;background:#7c3aed;padding:1px 6px;border-radius:4px">🧮 SAP</span>':''}
-          <button onclick="openSalesforceModal(${x.id})" style="background:#0f1e3a;border:1px solid #3b82f6;border-radius:6px;color:#60a5fa;font-size:10px;font-weight:700;padding:3px 8px;cursor:pointer;white-space:nowrap">☁️ Salesforce</button>
-        </div>
-        ${(x.comments&&x.comments.length)?x.comments.filter(Boolean).map(cm=>`<div style="font-size:11px;color:#f97316;font-style:italic">💬 ${cm}</div>`).join(''):''}
-        ${bonusHtml}
+        ${orderBodyHtml(x, sapCalc, {})}
       </div>`;
     }).join('');
   }

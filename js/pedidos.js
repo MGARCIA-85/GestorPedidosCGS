@@ -2754,10 +2754,7 @@ const body = document.getElementById('lst-body');
 if (!filtered.length) { body.innerHTML='<div style="text-align:center;color:#64748b;padding:40px">Sin pedidos sin ruta.</div>'; return; }
 body.innerHTML = '';
 filtered.forEach(o => {
-const tot   = orderTotal(o.items, o.clientId);
 const sapCalc = o.sapMode ? getSapCalcForOrder(o) : null;
-const lines = orderLinesHtml(o, sapCalc, 'pedidos');
-const sCls = o.status==='Concluido'?'bp-fact':o.status==='Cotización'?'bp-quot':'bp-pend';
 const _blocked = isOrderBlocked(o);
 const swipeColor = _blocked?'#a855f7':o.status==='Concluido'?'#4ade80':o.status==='Confirmado'?'#60a5fa':'#f1f5f9';
 const card = document.createElement('div');
@@ -2768,70 +2765,22 @@ card.style.borderLeftWidth = '3px';
 card.style.borderLeftStyle = 'solid';
 card.style.borderLeftColor = swipeColor;
 card.innerHTML = `
-<div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px">
-<div style="display:flex;align-items:flex-start;gap:8px">
+<div style="display:flex;align-items:flex-start;gap:8px;margin-bottom:6px">
 <input type="checkbox" class="ord-report-chk" data-oid="${o.id}"
   style="width:16px;height:16px;margin-top:3px;cursor:pointer;accent-color:#10b981;flex-shrink:0"
   ${(window._ordSel||new Set()).has(o.id)?'checked':''}
   onclick="event.stopPropagation();toggleOrdSel(${o.id},this.checked)"/>
 <div>
-<div style="font-weight:800;font-size:15px;color:${clientNameColor(o)};cursor:pointer;text-decoration:underline" onclick="event.stopPropagation();openClientCard(${o.clientId})">${o.clientName}</div>
-<div style="font-size:10px;color:#64748b">${fmtOrdDate(o.date)}${o.editedAt?' · Editado: '+fmtOrdDate(o.editedAt):''}</div>
-${_blocked?`<div style="font-size:11px;color:#a855f7;font-weight:700;margin-top:1px">🔒 Bloqueado (fecha futura)</div>`:''}
-${o.quote?`<div style="font-size:11px;color:#94a3b8;margin-top:1px">Cot: <strong style="color:#2dd4bf">${o.quote}</strong></div>`:''}
-${o.oc?`<div style="font-size:11px;color:#94a3b8;margin-top:1px">OC: <strong style="color:#818cf8">${o.oc}</strong></div>`:''}
-${o.delivery?`<div style="font-size:11px;color:#3b82f6;margin-top:1px">📍 Entrega: ${o.delivery}</div>`:''}
-${o.quoteNote?`<div style="font-size:11px;color:#38bdf8;font-weight:700;margin-top:1px">📅 Fecha de entrega: ${fmtEntrega(o.quoteNote)}</div>`:''}
+${orderInfoHtml(o, {showName:true, delivery:true})}
 </div>
 </div>
-</div>
-<div style="display:flex;flex-direction:column;align-items:flex-end;gap:3px">
-</div>
-</div>
-${lines}
-${(()=>{
-const cmts = o.comments && o.comments.length ? o.comments : (o.note ? [o.note] : []);
-return cmts.map(c=>`<div style="font-size:11px;color:#f97316;margin-top:4px">💬 ${c}</div>`).join('');
-})()}
-<div style="margin-top:8px">
-${(()=>{
-if(sapCalc) return '<div style=\"font-size:11px;color:#64748b;margin-bottom:2px\">Sin IVA: '+Q(sapCalc.subtotalSinIva)+' &nbsp;+&nbsp; IVA 12%: '+Q(sapCalc.ivaMonto)+'</div>';
-if(o.pricesIncIva) return '<div style=\"font-size:11px;color:#64748b;margin-bottom:2px\">Sin IVA: '+Q(tot/1.12)+' &nbsp;+&nbsp; IVA 12%: '+Q(tot-tot/1.12)+'</div>';
-if(o.applyIva)    return '<div style=\"font-size:11px;color:#64748b;margin-bottom:2px\">Subtotal: '+Q(tot)+' &nbsp;+&nbsp; IVA 12%: '+Q(tot*0.12)+'</div>';
-return '';
-})()}
-<div style="font-weight:800;font-size:15px;color:#f1f5f9;display:flex;align-items:center;gap:6px;flex-wrap:wrap">TOTAL ${Q(orderTotalWithIva(o, sapCalc))}
-${(sapCalc||o.pricesIncIva||o.applyIva) ? '<span style=\"font-size:10px;font-weight:600;color:#facc15;background:#1e3a5f;padding:1px 6px;border-radius:4px\">IVA incl.</span>' : ''}
-${sapCalc ? '<span style=\"font-size:10px;font-weight:700;color:#fff;background:#7c3aed;padding:1px 7px;border-radius:4px\">🧮 SAP</span>' : ''}
-<span class="${sCls}" style="margin-left:auto">${o.status}</span></div>
-</div>
-${orderBonusHtml(o, sapCalc, 'pedidos')}
-<div class="two">
-<div style="display:flex;align-items:center;gap:8px;flex:1;background:#161929;border-radius:9px;padding:8px 12px;border:1px solid #2a3050">
-  ${(()=>{
-    const blocked = isOrderBlocked(o);
-    const info = o.cancelled ? {label:'Cancelado', color:'#ef4444'}
-      : blocked ? {label:'Bloqueado', color:'#a855f7'}
-      : o.status==='Concluido' ? {label:'Concluido', color:'#4ade80'}
-      : o.status==='Confirmado' ? {label:'Confirmado', color:'#60a5fa'}
-      : {label:'Cotización', color:'#94a3b8'};
-    return `<span style="font-size:12px;font-weight:800;color:${info.color}">${info.label}</span>`;
-  })()}
-  <button onclick="openSalesforceModal(${o.id})" style="margin-left:auto;background:#0f1e3a;border:1px solid #3b82f6;border-radius:7px;color:#60a5fa;font-size:11px;font-weight:700;padding:6px 10px;cursor:pointer;white-space:nowrap">☁️ Salesforce</button>
-</div>
-<select class="sel" style="margin:0;flex:1;font-size:12px" onchange="assignOrderToRoute(${o.id},this)">
-<option value="">🗺️ ${o.routeId ? '✔ '+(S.routes.find(r=>r.id===o.routeId)||{name:'Ruta'}).name : 'Asignar a ruta...'}</option>
-${S.routes.slice().reverse().map(r=>`<option value="${r.id}" ${o.routeId===r.id?'selected':''}>${r.name}</option>`).join('')}
-${o.routeId ? '<option value="__remove__">✕ Quitar de ruta</option>' : ''}
-</select>
-</div>
-<div style="display:flex;gap:6px;margin-top:6px">
-<button class="bv" style="flex:1" onclick="duplicateOrder(${o.id})" title="Duplicar pedido">📋 Duplicar</button>
-<button class="bb" style="flex:1" onclick="showQuoteFromOrder(${o.id})">📄 Cotizar</button>
-<button class="bs" style="flex:1" onclick="startEditOrder(${o.id})">✏️ Editar</button>
-${o.status==='Cotización'?`<button class="bs" style="flex:1;color:#f59e0b;border-color:#f59e0b" onclick="cancelOrder(${o.id})">🚫 Cancelar</button>`:''}
-<button class="br" style="flex:0" onclick="delOrder(${o.id})">🗑</button>
-</div>`;
+${orderBodyHtml(o, sapCalc, {statusPill:true, statusRow:true, routeSelect:true, buttons:[
+  ['duplicate', `duplicateOrder(${o.id})`],
+  ['quote',     `showQuoteFromOrder(${o.id})`],
+  ['edit',      `startEditOrder(${o.id})`],
+  ...(o.status==='Cotización' ? [['cancel', `cancelOrder(${o.id})`]] : []),
+  ['del',       `delOrder(${o.id})`]
+]})}`;
 body.appendChild(card);
 });
 setTimeout(() => {

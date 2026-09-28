@@ -812,41 +812,27 @@ ${(()=>{
   const rows_map = {};
   cliOrds.forEach(o=>{
     const sapCalc = o.sapMode ? getSapCalcForOrder(o) : null;
-    const disp = orderTotalWithIva(o, sapCalc);
     const sCls = o.cancelled?'#ef4444':isOrderBlocked(o)?'#a855f7':o.status==='Concluido'?'#4ade80':o.status==='Confirmado'?'#60a5fa':'#f1f5f9';
-    const itemsHtml = orderLinesHtml(o, sapCalc, 'cliente');
-    const cotBtn = `<button onclick="openQuoteFromCli(${o.id})" style="flex:1;padding:5px 0;background:transparent;border:1px solid #3b82f6;border-radius:6px;color:#60a5fa;font-size:11px;cursor:pointer">📄 Cot.</button>`;
-    const editBtn = `<button onclick="openEditFromCli(${o.id})" style="flex:1;padding:5px 0;background:transparent;border:1px solid #f59e0b;border-radius:6px;color:#f59e0b;font-size:11px;cursor:pointer">✏️ Editar</button>`;
-    const duplBtn = `<button onclick="openDuplFromCli(${o.id})" style="flex:1;padding:5px 0;background:transparent;border:1px solid #a855f7;border-radius:6px;color:#a855f7;font-size:11px;cursor:pointer">📋 Dupl.</button>`;
-    const delBtn  = `<button onclick="openDelFromCli(${o.id})" style="flex:1;padding:5px 0;background:transparent;border:1px solid #ef4444;border-radius:6px;color:#ef4444;font-size:11px;cursor:pointer">🗑</button>`;
     const reactBtn = o.cancelled ? `<button onclick="reactivateOrder(${o.id})" style="width:100%;padding:6px 0;background:transparent;border:1px solid #10b981;border-radius:6px;color:#10b981;font-size:11px;font-weight:700;cursor:pointer;margin-top:4px">🔄 Reactivar pedido</button>` : '';
     const _isInherited = Number(o.clientId) !== Number(c.id);
     const rowHtml = `<div data-cli-oid="${o.id}" style="background:#161929;border-radius:8px;padding:8px 10px;margin-bottom:8px;border-left-width:3px;border-left-style:solid;border-left-color:${sCls};touch-action:pan-y">
       ${_isInherited?`<div style="font-size:10px;color:#a855f7;font-weight:700;margin-bottom:4px">📁 Cuenta anterior</div>`:''}
-      ${isOrderBlocked(o)?`<div style="font-size:10px;color:#a855f7;font-weight:700;margin-bottom:4px">🔒 Bloqueado (fecha futura)</div>`:''}
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">
-        <div style="display:flex;align-items:center;gap:6px">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px">
+        <div style="display:flex;align-items:flex-start;gap:8px">
           <input type="checkbox" class="cli-ord-chk" data-cid="${c.id}" data-oid="${o.id}" onchange="updateCliOrdSummary(${c.id})"
-            style="width:15px;height:15px;accent-color:#10b981;cursor:pointer;flex-shrink:0"/>
-          <div style="font-size:11px;color:#94a3b8">${fmtOrdDate(o.date)}${o.quote?' · <strong style="color:#2dd4bf">'+o.quote+'</strong>':''}${o.oc?' · OC: <strong style="color:#818cf8">'+o.oc+'</strong>':''}</div>
+            style="width:15px;height:15px;margin-top:3px;accent-color:#10b981;cursor:pointer;flex-shrink:0"/>
+          <div>
+${orderInfoHtml(o, {delivery:true})}
+          </div>
         </div>
-        <div style="display:flex;align-items:center;gap:5px">
-          ${o.routeId?`<span style="font-size:10px;color:#f59e0b;font-weight:700">(RUTA)</span>`:''}
-          <span style="font-size:10px;color:${sCls};font-weight:700">${o.cancelled?'🚫 CANCELADO':o.status}</span>
-        </div>
+        ${o.routeId?`<span style="font-size:10px;color:#f59e0b;font-weight:700">(RUTA)</span>`:''}
       </div>
-      ${o.delivery?`<div style="font-size:11px;color:#3b82f6;font-weight:600;margin-bottom:3px">📍 ${o.delivery}</div>`:''}
-      ${o.quoteNote?`<div style="font-size:11px;color:#38bdf8;font-weight:700;margin-bottom:4px">📅 Fecha de entrega: ${fmtEntrega(o.quoteNote)}</div>`:''}
-      <div style="background:#0d0f18;border-radius:5px;padding:4px 6px;margin-bottom:4px">${itemsHtml}</div>
-      <div style="display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:4px">
-        <span style="font-size:13px;font-weight:700;color:#f1f5f9">TOTAL ${Q(disp)}</span>
-        ${sapCalc?'<span style="font-size:9px;font-weight:700;color:#fff;background:#7c3aed;padding:1px 6px;border-radius:4px">🧮 SAP</span>':''}
-        <button onclick="openSalesforceModal(${o.id})" style="background:#0f1e3a;border:1px solid #3b82f6;border-radius:6px;color:#60a5fa;font-size:10px;font-weight:700;padding:3px 8px;cursor:pointer;white-space:nowrap">☁️ Salesforce</button>
-      </div>
-      ${(o.comments&&o.comments.length)?o.comments.filter(Boolean).map(cm=>`<div style="font-size:11px;color:#f97316;font-style:italic;margin-bottom:3px">💬 ${cm}</div>`).join(''):''}
-      ${orderBonusHtml(o, sapCalc, 'cliente')}
-      <div style="display:flex;gap:5px;margin-top:4px">${cotBtn}${editBtn}${duplBtn}${delBtn}</div>
-      ${reactBtn}
+      ${orderBodyHtml(o, sapCalc, {statusPill:true, statusRow:true, compact:true, extra:reactBtn, buttons:[
+        ['duplicate', `openDuplFromCli(${o.id})`],
+        ['quote',     `openQuoteFromCli(${o.id})`],
+        ['edit',      `openEditFromCli(${o.id})`],
+        ['del',       `openDelFromCli(${o.id})`]
+      ]})}
     </div>`;
     rows_map[o.id] = rowHtml;
   });

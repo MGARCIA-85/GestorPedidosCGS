@@ -692,34 +692,37 @@ function fmtD(d) {
 }
 
 // ═══════════════════════════════════════════════════════════════════
-//  LÍNEAS DE PRODUCTO DE UN PEDIDO — un solo lugar para las 4 tarjetas
-//  (Pedidos, Ficha de cliente, Rutas, Buscador). Antes cada una repetía
-//  todo este cálculo y armado con pequeñas variaciones.
-//  1) orderLinesData / orderBonusData  → los DATOS de cada línea, ya
-//     resueltos (modo SAP o normal, especificación, precio, unidad).
-//  2) orderLinesHtml / orderBonusHtml  → el HTML, con un "preset" por
-//     vista que conserva su tamaño y espaciado propio.
+//  TARJETA DE PEDIDO — UNA SOLA para todas las vistas
+//  (Pedidos, Ficha de cliente, Rutas y Buscador). Cada vista pone solo lo
+//  suyo (casilla de selección, arrastre, colapsar, gestos) y usa estas
+//  funciones para TODO lo demás. Un ajuste aquí se ve en todas.
+//
+//    orderInfoHtml      → cliente, fecha, Cot · OC, entrega
+//    orderBodyHtml      → líneas, notas, totales, bonificación, estado, botones
+//    (y las piezas que usan: orderLinesHtml, orderBonusHtml, orderTotalsHtml,
+//     orderStatusRowHtml, orderButtonsHtml)
+//
+//  REGLA DEL IVA en las líneas: el monto de cada línea va SIN IVA (junto a
+//  la etiqueta "+IVA" cuando el precio es sin IVA); el TOTAL es el que
+//  carga el IVA. Vale para "Agregar IVA" y para el modo SAP.
 // ═══════════════════════════════════════════════════════════════════
 
 // Líneas de venta ya resueltas para mostrar. En modo SAP usa los valores
 // convertidos (sapCalc); si no, los reales del pedido.
-//   subtotal     = monto de la línea sin sumarle IVA
-//   totalWithIva = monto de la línea sumándole 12% si el pedido es "agregar IVA"
+//   subtotal = monto de la línea SIN IVA (precio × cantidad)
 function orderLinesData(o, sapCalc) {
   if (sapCalc) return sapCalc.items.map(r => ({
     qty: r.qty, name: r.name, specLabel: r.specLabel,
     price: r.sapPriceNoIva, unit: r.sapUnitLabel,
-    subtotal: r.sapLineTotalWithIva, totalWithIva: r.sapLineTotalWithIva,
-    ivaTag: true, missing: false
+    subtotal: r.sapLineTotalNoIva, ivaTag: true, missing: false
   }));
   return (o.items || []).map(it => {
     const p   = S.products.find(x => x.id === (it.productId || Number(it.pid)));
     const pr  = (it.customPrice != null) ? it.customPrice : cliPrice(o.clientId, it.productId || it.pid, p?.basePrice || 0);
-    const sub = pr * it.qty * itemUnitSizeFor(it, p);
     return {
-      qty: it.qty, name: p ? p.name : null, specLabel: itemSpecLabel(it, p),
+      qty: it.qty, name: p ? p.name : 'Eliminado', specLabel: itemSpecLabel(it, p),
       price: pr, unit: p?.unitLabel || 'unidad',
-      subtotal: sub, totalWithIva: o.applyIva ? sub * 1.12 : sub,
+      subtotal: pr * it.qty * itemUnitSizeFor(it, p),
       ivaTag: !!o.applyIva, missing: !p
     };
   });
@@ -736,40 +739,19 @@ function orderBonusData(o, sapCalc) {
     const p = S.products.find(x => x.id === Number(bl.productId));
     return {
       qty: bl.qty, name: p ? p.name : '—', specLabel: itemSpecLabel(bl, p),
-      price: bl.price || 0, unit: p?.unitLabel || null, ivaTag: !!o.applyIva
+      price: bl.price || 0, unit: p?.unitLabel || 'unidad', ivaTag: !!o.applyIva
     };
   });
 }
 
-// Cada vista conserva su propio tamaño/espaciado (densidad) con su preset.
-//   outer/row/total = estilos;  iva = estilo de la etiqueta "+IVA"
-//   amount  = 'withIva' (el monto de la línea incluye el 12%) o 'base' (sin sumarlo)
-//   missing = texto si el producto ya no existe (null = omitir la línea)
-const ORDER_LINE_PRESETS = {
-  pedidos:  { outer:'padding:3px 0;border-bottom:1px solid #1e2640', row:'display:flex;justify-content:space-between;align-items:baseline;gap:4px;font-size:12px', total:'', iva:'font-size:9px;color:#facc15',  amount:'withIva', missing:'Eliminado' },
-  cliente:  { outer:'padding:3px 0;border-bottom:1px solid #1e2640', row:'display:flex;justify-content:space-between;align-items:baseline;gap:4px;font-size:11px', total:'', iva:'color:#facc15;font-size:10px', amount:'base',    missing:null },
-  rutas:    { outer:'font-size:12px;padding:5px 0;border-bottom:1px solid #1e2640', row:'display:flex;justify-content:space-between;align-items:baseline;gap:6px', total:'', iva:'color:#facc15;font-size:10px', amount:'base',    missing:'—' },
-  buscador: { outer:'padding:2px 0;border-bottom:1px solid #1e2640', row:'display:flex;justify-content:space-between;font-size:11px', total:';margin-left:6px', iva:'color:#facc15;font-size:10px', amount:'base',    missing:null }
-};
-const ORDER_BONUS_PRESETS = {
-  pedidos:  { margin:'6px', header:'font-size:11px;color:#10b981;font-weight:700;margin-bottom:3px', box:true,  badge:true,  spanInner:true,  line:'display:flex;justify-content:space-between;font-size:11px;padding:2px 0;border-bottom:1px solid #1e2640', unitFallback:'unidad' },
-  cliente:  { margin:'4px', header:'font-size:11px;color:#10b981;font-weight:700;margin-bottom:3px', box:true,  badge:true,  spanInner:false, line:'font-size:11px;color:#f1f5f9;font-weight:600;padding:2px 0;border-bottom:1px solid #1e2640', unitFallback:'unidad' },
-  rutas:    { margin:'4px', header:'font-size:11px;color:#10b981;font-weight:700;margin-bottom:3px', box:true,  badge:false, spanInner:false, line:'font-size:11px;color:#f1f5f9;font-weight:600;padding:2px 0;border-bottom:1px solid #1e2640', unitFallback:'unidad' },
-  buscador: { margin:'4px', header:'font-size:10px;color:#10b981;font-weight:700', box:false, badge:false, spanInner:false, line:'font-size:11px;color:#f1f5f9', unitFallback:'u' }
-};
-
-// HTML de las líneas de venta de un pedido para la vista indicada.
-function orderLinesHtml(o, sapCalc, presetName) {
-  const P = ORDER_LINE_PRESETS[presetName];
+// HTML de las líneas de venta de un pedido.
+function orderLinesHtml(o, sapCalc) {
   return orderLinesData(o, sapCalc).map(l => {
-    if (l.missing && !P.missing) return '';
-    const name   = l.missing ? P.missing : l.name;
-    const iva    = l.ivaTag ? ` <span style="${P.iva}">+IVA</span>` : '';
-    const amount = (P.amount === 'withIva') ? l.totalWithIva : l.subtotal;
-    return `<div style="${P.outer}">
-<div style="${P.row}">
-  <span style="color:#f1f5f9;font-weight:600;flex:1;min-width:0">${l.qty} ${name} × ${Q(l.price)}/${l.unit}${iva}</span>
-  <span style="color:#f1f5f9;font-weight:700;flex-shrink:0${P.total}">${Q(amount)}</span>
+    const iva = l.ivaTag ? ` <span style="font-size:9px;color:#facc15">+IVA</span>` : '';
+    return `<div style="padding:3px 0;border-bottom:1px solid #1e2640">
+<div style="display:flex;justify-content:space-between;align-items:baseline;gap:4px;font-size:12px">
+  <span style="color:#f1f5f9;font-weight:600;flex:1;min-width:0">${l.qty} ${l.name} × ${Q(l.price)}/${l.unit}${iva}</span>
+  <span style="color:#f1f5f9;font-weight:700;flex-shrink:0">${Q(l.subtotal)}</span>
 </div>
 ${specTagLineHtml(l.specLabel)}
 </div>`;
@@ -787,21 +769,139 @@ function bonusBadgeHtml(o) {
       : '<span style="font-size:9px;background:#2d0f0f;color:#ef4444;padding:1px 6px;border-radius:6px;font-weight:700;margin-left:6px">⚠️ Sin verificar</span>';
 }
 
-// HTML del bloque "🎁 BONIFICACIÓN" de un pedido para la vista indicada.
-function orderBonusHtml(o, sapCalc, presetName) {
+// HTML del bloque "🎁 BONIFICACIÓN" (la especificación va como etiqueta aparte, igual que en las ventas).
+function orderBonusHtml(o, sapCalc) {
   const list = orderBonusData(o, sapCalc);
   if (!list.length) return '';
-  const P = ORDER_BONUS_PRESETS[presetName];
   const lines = list.map(b => {
-    const spec = b.specLabel ? ` (${b.specLabel})` : '';
-    const iva  = b.ivaTag ? ` <span style="font-size:9px;color:#facc15">+IVA</span>` : '';
-    const text = `${b.qty} ${b.name}${spec} × ${Q(b.price)}/${b.unit || P.unitFallback}${iva}`;
-    return P.spanInner
-      ? `<div style="${P.line}"><span style="color:#f1f5f9;font-weight:600">${text}</span></div>`
-      : `<div style="${P.line}">${text}</div>`;
+    const iva = b.ivaTag ? ` <span style="font-size:9px;color:#facc15">+IVA</span>` : '';
+    return `<div style="padding:2px 0;border-bottom:1px solid #1e2640">
+<div style="font-size:11px;color:#f1f5f9;font-weight:600">${b.qty} ${b.name} × ${Q(b.price)}/${b.unit}${iva}</div>
+${specTagLineHtml(b.specLabel)}
+</div>`;
   }).join('');
-  const head = `<div style="${P.header}">🎁 BONIFICACIÓN${P.badge ? bonusBadgeHtml(o) : ''}</div>`;
-  return `<div style="margin-top:${P.margin}">${head}${P.box ? `<div style="background:#0d0f18;border-radius:5px;padding:4px 6px">${lines}</div>` : lines}</div>`;
+  return `<div style="margin-top:6px"><div style="font-size:11px;color:#10b981;font-weight:700;margin-bottom:3px">🎁 BONIFICACIÓN${bonusBadgeHtml(o)}</div><div style="background:#0d0f18;border-radius:5px;padding:4px 6px">${lines}</div></div>`;
+}
+
+// Estado que se muestra (etiqueta y color característico)
+function orderStatusInfo(o) {
+  return o.cancelled ? { label:'Cancelado',  color:'#ef4444' }
+    : isOrderBlocked(o) ? { label:'Bloqueado',  color:'#a855f7' }
+    : o.status === 'Concluido'  ? { label:'Concluido',  color:'#4ade80' }
+    : o.status === 'Confirmado' ? { label:'Confirmado', color:'#60a5fa' }
+    : { label:'Cotización', color:'#94a3b8' };
+}
+
+// Entrega y fecha de entrega
+function orderDeliveryHtml(o) {
+  return (o.delivery  ? `<div style="font-size:11px;color:#3b82f6;margin-top:1px">📍 Entrega: ${o.delivery}</div>` : '')
+       + (o.quoteNote ? `<div style="font-size:11px;color:#38bdf8;font-weight:700;margin-top:1px">📅 Fecha de entrega: ${fmtEntrega(o.quoteNote)}</div>` : '');
+}
+
+// Identificación del pedido: cliente / fecha / bloqueado / Cot · OC (en la misma línea) / entrega.
+//   opt.showName  → mostrar el nombre del cliente (con enlace a su ficha)
+//   opt.prefix    → texto antes del nombre (ej. "#3 " en Rutas)
+//   opt.nameSize  → tamaño del nombre en px (15 por defecto)
+//   opt.delivery  → incluir entrega y fecha de entrega
+//   opt.link      → false = nombre sin enlace a la ficha (Buscador, donde tocar la fila abre el pedido)
+//   opt.hl        → función para resaltar coincidencias (Buscador)
+function orderInfoHtml(o, opt) {
+  opt = opt || {};
+  const h = opt.hl || (t => t);
+  const size = opt.nameSize || 15;
+  const parts = [];
+  if (opt.showName) {
+    const link = opt.link !== false;
+    parts.push(`<div style="font-weight:800;font-size:${size}px;color:${clientNameColor(o)};${link ? 'cursor:pointer;text-decoration:underline' : ''}"${link ? ` onclick="event.stopPropagation();openClientCard(${o.clientId})"` : ''}>${opt.prefix ? `<span style="color:#f1f5f9;text-decoration:none;display:inline-block">${opt.prefix}</span>` : ''}${h(o.clientName)}</div>`);
+  }
+  parts.push(`<div style="font-size:10px;color:#64748b">${fmtOrdDate(o.date)}${o.editedAt ? ' · Editado: ' + fmtOrdDate(o.editedAt) : ''}</div>`);
+  if (isOrderBlocked(o)) parts.push(`<div style="font-size:11px;color:#a855f7;font-weight:700;margin-top:1px">🔒 Bloqueado (fecha futura)</div>`);
+  const refs = [
+    o.quote ? `Cot: <strong style="color:#2dd4bf">${h(o.quote)}</strong>` : '',
+    o.oc    ? `OC: <strong style="color:#818cf8">${h(o.oc)}</strong>`    : ''
+  ].filter(Boolean).join(' · ');
+  if (refs) parts.push(`<div style="font-size:11px;color:#94a3b8;margin-top:1px">${refs}</div>`);
+  if (opt.delivery) parts.push(orderDeliveryHtml(o));
+  return parts.join('\n');
+}
+
+// Desglose + TOTAL (con insignias IVA incl. / SAP y, si se pide, el estado)
+function orderTotalsHtml(o, sapCalc, statusPill) {
+  const tot = orderTotal(o.items, o.clientId);
+  const sub = t => `<div style="font-size:11px;color:#64748b;margin-bottom:2px">${t}</div>`;
+  const breakdown = sapCalc ? sub(`Sin IVA: ${Q(sapCalc.subtotalSinIva)} &nbsp;+&nbsp; IVA 12%: ${Q(sapCalc.ivaMonto)}`)
+    : o.pricesIncIva ? sub(`Sin IVA: ${Q(tot/1.12)} &nbsp;+&nbsp; IVA 12%: ${Q(tot - tot/1.12)}`)
+    : o.applyIva     ? sub(`Subtotal: ${Q(tot)} &nbsp;+&nbsp; IVA 12%: ${Q(tot*0.12)}`)
+    : '';
+  const sCls = o.status === 'Concluido' ? 'bp-fact' : o.status === 'Cotización' ? 'bp-quot' : 'bp-pend';
+  return `<div style="margin-top:8px">
+${breakdown}
+<div style="font-weight:800;font-size:15px;color:#f1f5f9;display:flex;align-items:center;gap:6px;flex-wrap:wrap">TOTAL ${Q(orderTotalWithIva(o, sapCalc))}
+${(sapCalc || o.pricesIncIva || o.applyIva) ? '<span style="font-size:10px;font-weight:600;color:#facc15;background:#1e3a5f;padding:1px 6px;border-radius:4px">IVA incl.</span>' : ''}
+${sapCalc ? '<span style="font-size:10px;font-weight:700;color:#fff;background:#7c3aed;padding:1px 7px;border-radius:4px">🧮 SAP</span>' : ''}
+${statusPill ? `<span class="${sCls}" style="margin-left:auto">${o.status}</span>` : ''}</div>
+</div>`;
+}
+
+const SALESFORCE_BTN_STYLE = 'background:#0f1e3a;border:1px solid #3b82f6;border-radius:7px;color:#60a5fa;font-size:11px;font-weight:700;padding:6px 10px;cursor:pointer;white-space:nowrap';
+
+// Fila de estado (etiqueta + botón Salesforce) y, si se pide, "Asignar a ruta"
+function orderStatusRowHtml(o, routeSelect) {
+  const info = orderStatusInfo(o);
+  const sel = routeSelect ? `
+<select class="sel" style="margin:0;flex:1;font-size:12px" onchange="assignOrderToRoute(${o.id},this)">
+<option value="">🗺️ ${o.routeId ? '✔ ' + (S.routes.find(r => r.id === o.routeId) || { name: 'Ruta' }).name : 'Asignar a ruta...'}</option>
+${S.routes.slice().reverse().map(r => `<option value="${r.id}" ${o.routeId === r.id ? 'selected' : ''}>${r.name}</option>`).join('')}
+${o.routeId ? '<option value="__remove__">✕ Quitar de ruta</option>' : ''}
+</select>` : '';
+  return `<div class="two">
+<div style="display:flex;align-items:center;gap:8px;flex:1;background:#161929;border-radius:9px;padding:8px 12px;border:1px solid #2a3050">
+  <span style="font-size:12px;font-weight:800;color:${info.color}">${info.label}</span>
+  <button onclick="event.stopPropagation();openSalesforceModal(${o.id})" style="margin-left:auto;${SALESFORCE_BTN_STYLE}">☁️ Salesforce</button>
+</div>${sel}
+</div>`;
+}
+
+// Botones de acción con el mismo aspecto en todas las vistas.
+//   items = [['duplicate','duplicateOrder(5)'], ['quote', ...], ['edit', ...], ['cancel', ...], ['del', ...], ['removeRoute', ...]]
+const ORDER_BUTTONS = {
+  duplicate:   { cls:'bv', label:'📋 Duplicar', title:'Duplicar pedido' },
+  quote:       { cls:'bb', label:'📄 Cotizar' },
+  edit:        { cls:'bs', label:'✏️ Editar' },
+  cancel:      { cls:'bs', label:'🚫 Cancelar', style:'color:#f59e0b;border-color:#f59e0b' },
+  removeRoute: { cls:'br', label:'✕ Quitar', title:'Quitar de la ruta' },
+  del:         { cls:'br', label:'🗑', fixed:true }
+};
+function orderButtonsHtml(items, compact) {
+  if (!items || !items.length) return '';
+  // compact = para tarjetas anidadas y más angostas (Rutas, ficha del cliente)
+  const size = compact ? ';font-size:11px;padding:5px 2px' : '';
+  return `<div style="display:flex;gap:6px;margin-top:6px" onclick="event.stopPropagation()">` + items.map(([kind, js]) => {
+    const b = ORDER_BUTTONS[kind];
+    return `<button class="${b.cls}" style="${b.fixed ? 'flex:0' : 'flex:1'}${size}${b.style ? ';' + b.style : ''}" onclick="${js}"${b.title ? ` title="${b.title}"` : ''}>${b.label}</button>`;
+  }).join('') + `</div>`;
+}
+
+// CUERPO de la tarjeta (todo lo que va debajo de la identificación).
+//   opt.statusPill   → estado como etiqueta al lado del TOTAL
+//   opt.statusRow    → fila de estado + Salesforce (si no, Salesforce va suelto)
+//   opt.routeSelect  → incluir "Asignar a ruta"
+//   opt.buttons      → botones de acción (ver orderButtonsHtml)
+//   opt.compact      → botones más angostos, para tarjetas anidadas (Rutas, ficha del cliente)
+//   opt.extra        → HTML adicional al final (ej. "Reactivar pedido")
+function orderBodyHtml(o, sapCalc, opt) {
+  opt = opt || {};
+  const cmts = (o.comments && o.comments.length ? o.comments : (o.note ? [o.note] : [])).filter(c => c && String(c).trim());
+  const comments = cmts.map(c => `<div style="font-size:11px;color:#f97316;margin-top:4px">💬 ${c}</div>`).join('');
+  const salesforce = opt.statusRow ? ''
+    : `<div style="margin-top:6px"><button onclick="event.stopPropagation();openSalesforceModal(${o.id})" style="${SALESFORCE_BTN_STYLE}">☁️ Salesforce</button></div>`;
+  return `${orderLinesHtml(o, sapCalc) || '<div style="font-size:11px;color:#64748b">Sin productos</div>'}
+${comments}
+${orderTotalsHtml(o, sapCalc, opt.statusPill)}
+${orderBonusHtml(o, sapCalc)}
+${opt.statusRow ? orderStatusRowHtml(o, opt.routeSelect) : salesforce}
+${orderButtonsHtml(opt.buttons, opt.compact)}
+${opt.extra || ''}`;
 }
 
 // ── Modo SAP: cálculo compartido para mostrar un pedido convertido ─────

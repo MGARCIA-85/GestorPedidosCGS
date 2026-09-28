@@ -176,14 +176,8 @@ function renderRoutes() {
 
     const ordRows = filteredOrders.length ? filteredOrders.map((o, rIdx) => {
       const sapCalc = o.sapMode ? getSapCalcForOrder(o) : null;
-      const oDisp = orderTotalWithIva(o, sapCalc);
       const statusColor = isOrderBlocked(o)?'#a855f7':o.status==='Concluido'?'#4ade80':o.status==='Confirmado'?'#60a5fa':'#f1f5f9';
-      const items = o.items.map(it=>{
-        const p=S.products.find(x=>x.id===(it.productId||Number(it.pid)));
-        return `<span style="font-size:11px;color:#94a3b8">• ${p?p.name:'—'} ×${it.qty}</span>`;
-      }).join(' ');
       const ordOpen = window._ordOpen && window._ordOpen[o.id];
-      const itemsHtml = orderLinesHtml(o, sapCalc, 'rutas');
 
       return `<div data-oid="${o.id}" data-rid="${r.id}" style="background:#161929;border-radius:8px;margin-bottom:6px;border-left-width:3px;border-left-style:solid;border-left-color:${statusColor};overflow:hidden;${rSort==='manual'?'cursor:grab':''}">
         <!-- CABECERA: siempre visible, clic para expandir -->
@@ -195,9 +189,7 @@ function renderRoutes() {
               ${(window._routeSel[r.id]||new Set()).has(o.id)?'checked':''}
               onclick="event.stopPropagation();toggleRouteOrdSel(${r.id},${o.id},this.checked)"/>
             <div style="display:flex;flex-direction:column;min-width:0">
-              <div><span style="font-size:13px;font-weight:700;color:#f1f5f9">#${rIdx+1} </span><span style="font-size:13px;font-weight:700;color:${clientNameColor(o)};cursor:pointer;text-decoration:underline" onclick="event.stopPropagation();openClientCard(${o.clientId})">${o.clientName}</span></div>
-              <div style="font-size:10px;color:#64748b;margin-top:2px">${fmtOrdDate(o.date)}${o.quote?' · Cot: <strong style="color:#2dd4bf">'+o.quote+'</strong>':''}${o.oc?' · Orden: <strong style="color:#818cf8">'+o.oc+'</strong>':''}</div>
-              ${isOrderBlocked(o)?`<div style="font-size:10px;color:#a855f7;font-weight:700">🔒 Bloqueado (fecha futura)</div>`:''}
+${orderInfoHtml(o, {showName:true, prefix:`#${rIdx+1} `, nameSize:13})}
             </div>
           </div>
           <div style="display:flex;align-items:center;gap:5px;flex-shrink:0">
@@ -207,37 +199,13 @@ function renderRoutes() {
         </div>
         <!-- DETALLE: colapsable -->
         ${ordOpen ? `<div style="padding:0 10px 10px">
-          <!-- Entrega y quoteNote ARRIBA de productos -->
-          ${o.delivery?`<div style="font-size:11px;color:#3b82f6;font-weight:600;margin-bottom:4px;margin-top:4px">📍 ${o.delivery}</div>`:''}
-          ${o.quoteNote?`<div style="font-size:11px;color:#38bdf8;font-weight:700;margin-bottom:6px">📅 Fecha de entrega: ${fmtEntrega(o.quoteNote)}</div>`:''}
-          <!-- Productos -->
-          <div style="background:#0d0f18;border-radius:6px;padding:6px 8px;margin-bottom:8px">
-            ${itemsHtml || '<div style="font-size:11px;color:#64748b">Sin productos</div>'}
-          </div>
-          <!-- Total y bonif -->
-          <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;flex-wrap:wrap">
-            <span style="font-size:13px;font-weight:700;color:#f1f5f9">TOTAL ${Q(oDisp)}</span>
-            ${sapCalc?'<span style="font-size:9px;font-weight:700;color:#fff;background:#7c3aed;padding:1px 6px;border-radius:4px">🧮 SAP</span>':''}
-            <button onclick="openSalesforceModal(${o.id})" style="background:#0f1e3a;border:1px solid #3b82f6;border-radius:6px;color:#60a5fa;font-size:10px;font-weight:700;padding:3px 8px;cursor:pointer;white-space:nowrap">☁️ Salesforce</button>
-            ${(o.bonusLines&&o.bonusLines.length)?(()=>{
-              const av = o.bonusLines.every(bl => bl.fromRuleId != null);
-              const ae = o.bonusLines.every(bl => bl.exceptional);
-              const ic = av ? '✅' : ae ? '🎗️' : '⚠️';
-              const bc = av ? '#10b981' : ae ? '#f59e0b' : '#ef4444';
-              return `<span style="font-size:10px;background:#1e3a8a;color:${bc};padding:1px 6px;border-radius:6px;font-weight:700">${ic} Bonif.</span>`;
-            })():''}
-          </div>
-          <!-- Comentarios normales ABAJO -->
-          ${(o.comments&&o.comments.length)?o.comments.filter(Boolean).map(cm=>`<div style="font-size:11px;color:#f97316;font-style:italic;margin-bottom:3px">💬 ${cm}</div>`).join(''):''}
-          <!-- Bonificación -->
-          ${orderBonusHtml(o, sapCalc, 'rutas')}
-          <!-- Botones -->
-          <div style="display:flex;gap:4px;align-items:center;margin-top:6px" onclick="event.stopPropagation()">
-            <button class="bs" style="flex:1;font-size:11px;padding:5px 2px" onclick="editOrderFromRoute(${o.id})">✏️ Editar</button>
-            <button class="bb" style="flex:1;font-size:11px;padding:5px 2px" onclick="openQuoteFromRoute(${o.id})">📄 Cot.</button>
-            <button class="bv" style="flex:1;font-size:11px;padding:5px 2px" onclick="duplicateOrder(${o.id})">📋 Dupl.</button>
-            <button class="br" style="flex:1;font-size:11px;padding:5px 2px" onclick="removeOrderFromRoute(${o.id},${r.id})">✕</button>
-          </div>
+          ${orderDeliveryHtml(o)}
+          ${orderBodyHtml(o, sapCalc, {statusRow:true, compact:true, buttons:[
+            ['duplicate',   `duplicateOrder(${o.id})`],
+            ['quote',       `openQuoteFromRoute(${o.id})`],
+            ['edit',        `editOrderFromRoute(${o.id})`],
+            ['removeRoute', `removeOrderFromRoute(${o.id},${r.id})`]
+          ]})}
         </div>` : ''}
       </div>`;
     }).join('') : '<div style="font-size:12px;color:#64748b;padding:8px 0">Sin pedidos. Presiona <strong>🛒 + Pedido</strong>.</div>';
