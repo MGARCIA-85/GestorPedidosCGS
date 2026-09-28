@@ -433,6 +433,7 @@ document.addEventListener('visibilitychange', () => {
 
 async function driveRestoreBackup(skipConfirm = false) {
   if (!_driveToken) return toast('Primero conecta Google Drive','#f59e0b');
+  let _reintentoTokenUsado = false; // si Drive rechaza el token, se renueva y se reintenta UNA sola vez
   const doRestore = async () => {
     try {
       toast('⏳ Buscando respaldo en Drive...','#f59e0b');
@@ -442,7 +443,16 @@ async function driveRestoreBackup(skipConfirm = false) {
       );
       if (!search.ok) {
         const err = await search.json();
-        if (err.error?.code === 401) { const renewed = await driveEnsureToken(); if (!renewed) { renderDriveStatus(); return toast('Sesión expirada. Vuelve a conectar Drive.','#ef4444'); } return driveSaveBackup(showToast); }
+        if (err.error?.code === 401) {
+          // Drive rechazó el token: hay que renovarlo de verdad y REINTENTAR LA RESTAURACIÓN
+          // (antes llamaba a driveSaveBackup con una variable inexistente y fallaba).
+          if (_reintentoTokenUsado) { renderDriveStatus(); return toast('Sesión expirada. Vuelve a conectar Drive.','#ef4444'); }
+          _reintentoTokenUsado = true;
+          _driveTokenExpiry = 0; // sin esto driveEnsureToken daría por bueno el token que Drive acaba de rechazar
+          const renewed = await driveEnsureToken();
+          if (!renewed) { renderDriveStatus(); return toast('Sesión expirada. Vuelve a conectar Drive.','#ef4444'); }
+          return doRestore();
+        }
         return toast('⚠️ Error: '+JSON.stringify(err.error?.message),'#ef4444');
       }
       const found = await search.json();
@@ -495,7 +505,7 @@ function driveDisconnect() {
   renderDriveStatus();
 }
 
-async function driveSaveBackup(showToast=true) {
+async function driveSaveBackup(showToast=true, _reintento=false) {
   const ok = await driveEnsureToken();
   if (!ok || !_driveToken) return;
   try {
@@ -547,8 +557,13 @@ async function driveSaveBackup(showToast=true) {
       // Token expirado — intentar renovar antes de asumir que está desconectado
       const err = await res.json();
       if (err.error?.code === 401) {
-        const renewed = await driveEnsureToken();
-        if (renewed) return driveSaveBackup(showToast);
+        // Drive rechazó el token: renovar de verdad y reintentar UNA sola vez
+        // (antes, si el reloj local creía que el token aún valía, se reintentaba sin fin).
+        if (!_reintento) {
+          _driveTokenExpiry = 0;
+          const renewed = await driveEnsureToken();
+          if (renewed) return driveSaveBackup(showToast, true);
+        }
         renderDriveStatus();
       }
       else if (showToast) toast('⚠️ Error al guardar en Drive','#ef4444');
