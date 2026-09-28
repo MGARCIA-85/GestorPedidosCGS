@@ -842,26 +842,8 @@ function renderSapCalc() {
   const roundMode = window._sapRoundMode || 'floor';
   const roundFn = (n) => roundMode === 'round' ? Math.round(n*100)/100 : Math.floor(n*100)/100;
 
-  function calcLine(p, qty, priceWithIva, weightKgPerQty, unitSizePerQty) {
-    if (!p || !qty || priceWithIva == null) return null;
-    const unitSize = unitSizePerQty != null ? Number(unitSizePerQty) : (Number(p.unitSize) || 1);
-    const totalUnits = Number(qty) * unitSize;
-    const lineTotalWithIva = totalUnits * Number(priceWithIva);
-    let sapQty, sapUnitLabel;
-    if (p.facturaPorKilo) {
-      const w = weightKgPerQty != null ? Number(weightKgPerQty) : Number(p.weightKg || 0);
-      sapQty = Number(qty) * w;
-      sapUnitLabel = 'kg';
-    } else {
-      sapQty = totalUnits;
-      sapUnitLabel = p.unitLabel || 'unidad';
-    }
-    if (!sapQty) return null;
-    const sapPriceWithIva = lineTotalWithIva / sapQty;
-    const sapPriceNoIva = roundFn(sapPriceWithIva / 1.12);
-    const sapLineTotalWithIva = sapQty * sapPriceNoIva * 1.12;
-    return { sapQty, sapUnitLabel, sapPriceNoIva, sapLineTotalWithIva };
-  }
+  const calcLine = (p, qty, priceWithIva, weightKgPerQty, unitSizePerQty) =>
+    sapCalcLine(p, qty, priceWithIva, weightKgPerQty, unitSizePerQty, roundFn);
 
   let rows = '';
   let grand = 0;
@@ -875,7 +857,7 @@ function renderSapCalc() {
     const r = calcLine(p, it.qty, priceWithIva, chosenSpec ? chosenSpec.weightKg : null, chosenSpec ? chosenSpec.unitSize : null);
     if (!r) return;
     grand += r.sapLineTotalWithIva;
-    rows += `<div class="prow"><span style="color:#f1f5f9">${p.name}${chosenSpec?' ('+chosenSpec.label+')':''}</span><span style="color:#94a3b8">${_sapFmtQty(r.sapQty)} ${r.sapUnitLabel} × ${Q(r.sapPriceNoIva)}</span></div>`;
+    rows += `<div class="prow"><span style="color:#f1f5f9">${p.name}${chosenSpec?' ('+chosenSpec.label+')':''}</span><span style="color:#94a3b8">${_sapFmtQty(r.sapQty)} ${r.sapUnitLabel==='Kilo'?'kg':r.sapUnitLabel} × ${Q(r.sapPriceNoIva)}</span></div>`;
   });
 
   (ordBonusLines || []).forEach(bl => {
@@ -888,7 +870,7 @@ function renderSapCalc() {
     const r = calcLine(p, bl.qty, priceWithIva, chosenSpec ? chosenSpec.weightKg : null, chosenSpec ? chosenSpec.unitSize : null);
     if (!r) return;
     grand += r.sapLineTotalWithIva;
-    rows += `<div class="prow"><span style="color:#f59e0b">🎁 ${p.name}${chosenSpec?' ('+chosenSpec.label+')':''}</span><span style="color:#94a3b8">${_sapFmtQty(r.sapQty)} ${r.sapUnitLabel} × ${Q(r.sapPriceNoIva)}</span></div>`;
+    rows += `<div class="prow"><span style="color:#f59e0b">🎁 ${p.name}${chosenSpec?' ('+chosenSpec.label+')':''}</span><span style="color:#94a3b8">${_sapFmtQty(r.sapQty)} ${r.sapUnitLabel==='Kilo'?'kg':r.sapUnitLabel} × ${Q(r.sapPriceNoIva)}</span></div>`;
   });
 
   panel.innerHTML = `<div style="background:#1a1030;border:1px solid #7c3aed;border-radius:8px;padding:10px">
@@ -2568,13 +2550,6 @@ function generateMultiFilterReport() {
   const fromStr = fFrom || '2000-01-01';
   const toStr   = fTo   || '2099-12-31';
 
-  function toYMD(d) {
-    if (!d) return '';
-    if (/^\d{4}-\d{2}-\d{2}$/.test(String(d))) return d;
-    const p = String(d).split(',')[0].split('/');
-    return p.length===3 ? `${p[2].trim()}-${p[1].padStart(2,'0')}-${p[0].padStart(2,'0')}` : d;
-  }
-
   let filtered = S.orders.filter(o =>
     clientIds.includes(Number(o.clientId)) &&
     (o.status==='Confirmado'||o.status==='Concluido')
@@ -2599,16 +2574,6 @@ function generateMultiFilterReport() {
 
   const b = S.biz || {};
   const MESES = ['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
-  function fmtD(d) {
-    if (!d) return '—';
-    if (String(d).includes('/')) {
-      const parts = String(d).split(',')[0].split('/');
-      if (parts.length===3) return `${parts[0].padStart(2,'0')}/${parts[1].padStart(2,'0')}/${parts[2].trim()}`;
-      return String(d).split(',')[0];
-    }
-    return d;
-  }
-
   let grandTotal = 0;
   const byMonth = {};
   // Resumen de productos: por mes y total general
@@ -2953,76 +2918,6 @@ function assignOrderToRoute(oid, sel) {
     save(); renderList(); toast('✔ Pedido asignado a: '+r.name);
   }
 }
-function setOrderStatus(id, checked, type) {
-  const o = S.orders.find(x=>x.id===id); if (!o) return;
-  if (type==='switch') {
-    if (o.status==='Concluido') return;
-    const newSt = (o.status==='Confirmado') ? 'Cotización' : 'Confirmado';
-    if (newSt === 'Confirmado') {
-      const check = canAdvanceOrderStatus(o, newSt);
-      if (!check.ok) { handleConfirmBlocked(o, check.reason); renderList(); return; }
-    }
-    o.status = newSt;
-    if (o.status==='Confirmado') {
-      // Si el cliente de este pedido es un prospecto, se convierte en cliente automáticamente
-      const clientOfOrder = S.clients.find(c=>c.id===Number(o.clientId));
-      if (clientOfOrder && clientOfOrder.isProspect) {
-        delete clientOfOrder.isProspect;
-        toast('✅ "' + clientOfOrder.name + '" se convirtió en cliente automáticamente', '#10b981');
-      }
-      save();
-      const triggered = checkBonusAlert(o.clientId, o.id, ()=>{ renderList(); renderRoutes(); renderQuotesList(); renderProspects(); }, o);
-      if (!triggered) { renderList(); renderRoutes(); renderQuotesList(); renderProspects(); }
-      return;
-    }
-  } else if (type==='check') {
-    const newSt = (o.status==='Concluido') ? 'Confirmado' : 'Concluido';
-    if (newSt === 'Concluido' && !o.delivery) {
-      toast('📍 El pedido no tiene dirección de entrega. Edítalo primero.', '#ef4444'); return;
-    }
-    o.status = newSt;
-  }
-  save(); renderList(); renderRoutes();
-}
-
-function togStatus(id) {
-const o = S.orders.find(x=>x.id===id); if (!o) return;
-const cycle = {'Cotización':'Confirmado','Confirmado':'Concluido','Concluido':'Cotización'};
-const newStatus = cycle[o.status] || 'Cotización';
-const _check = canAdvanceOrderStatus(o, newStatus);
-if (!_check.ok) { handleConfirmBlocked(o, _check.reason); return; }
-// Si va a Confirmado, verificar bonificaciones primero
-if (newStatus === 'Confirmado') {
-  o.status = 'Confirmado';
-  const clientOfOrder2 = S.clients.find(c=>c.id===Number(o.clientId));
-  if (clientOfOrder2 && clientOfOrder2.isProspect) {
-    delete clientOfOrder2.isProspect;
-    toast('✅ "' + clientOfOrder2.name + '" se convirtió en cliente automáticamente', '#10b981');
-  }
-  save();
-  const triggered = checkBonusAlert(o.clientId, o.id, () => {
-    renderList(); renderRoutes(); renderQuotesList(); renderProspects();
-  }, o);
-  if (!triggered) {
-    renderList(); renderRoutes(); renderQuotesList(); renderProspects();
-  }
-  return;
-}
-o.status = newStatus;
-save();
-const card = document.querySelector(`[data-id="${id}"]`);
-if (card) {
-  const btn = card.querySelector('[onclick^="togStatus"]');
-  if (btn) btn.textContent = newStatus==='Cotización'?'📄 Cotización':newStatus==='Confirmado'?'✅ Confirmado':'✔ Concluido';
-}
-['Cotización','Confirmado','Concluido'].forEach(st => {
-  const el = document.getElementById('cnt-'+st);
-  if (el) el.textContent = '('+S.orders.filter(x=>x.status===st&&!x.routeId).length+')';
-});
-}
-
-
-
 function cancelOrder(id) {
   const o = S.orders.find(x => x.id===id);
   if (!o) return;

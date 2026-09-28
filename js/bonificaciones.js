@@ -1040,26 +1040,6 @@ function generateBonusSimpleReport(cid, fromStr, toStr, includeBonus=true, prodI
   const c   = S.clients.find(x => x.id === Number(cid));
   const biz = S.biz || {};
 
-  function fmtD(d) {
-    if (!d) return '—';
-    if (String(d).includes('/')) {
-      const parts = String(d).split(',')[0].split('/');
-      if (parts.length===3) return `${parts[0].padStart(2,'0')}/${parts[1].padStart(2,'0')}/${parts[2].trim()}`;
-      return String(d).split(',')[0];
-    }
-    const p = String(d).split('-');
-    return p.length===3 ? `${p[2]}/${p[1]}/${p[0]}` : d;
-  }
-  function toYMD(d) {
-    if (!d) return '';
-    if (/^\d{4}-\d{2}-\d{2}$/.test(String(d))) return d;
-    const p = String(d).split(',')[0].split('/');
-    return p.length===3 ? `${p[2].trim()}-${p[1].padStart(2,'0')}-${p[0].padStart(2,'0')}` : d;
-  }
-  function getUnit(name, qty) {
-    return '';
-  }
-
   // Todos los pedidos del cliente en el rango (incluye cuentas anteriores vinculadas)
   const _effIdsRep1 = getEffectiveClientIds(cid);
   let allOrders = S.orders
@@ -1129,7 +1109,7 @@ function generateBonusSimpleReport(cid, fromStr, toStr, includeBonus=true, prodI
         const _ivaTagN = o.applyIva ? ' <span style="color:#2563eb">+IVA</span>' : '';
         return `<tr>
           <td style="padding:2px 0 2px 6px;font-size:12px;color:#1e293b">${p?p.name:'—'}</td>
-          <td style="padding:2px 0;font-size:12px;color:#374151;text-align:center">${qty} ${getUnit(p?p.name:'',qty)}</td>
+          <td style="padding:2px 0;font-size:12px;color:#374151;text-align:center">${qty}</td>
           <td style="padding:2px 0;font-size:11px;color:#64748b;text-align:center">${Q(pr)}/${ul}${unitDesc}${_ivaTagN}</td>
           <td style="padding:2px 0;font-size:12px;font-weight:600;color:#1e293b;text-align:right">${Q(sub)}</td>
         </tr>`;
@@ -1221,26 +1201,6 @@ function generateBonusSimpleReport(cid, fromStr, toStr, includeBonus=true, prodI
 function generateBonusHistoryReport(cid, fromStr, toStr) {
   const c   = S.clients.find(x => x.id === Number(cid));
   const biz = S.biz || {};
-
-  function fmtD(d) {
-    if (!d) return '—';
-    if (String(d).includes('/')) {
-      const parts = String(d).split(',')[0].split('/');
-      if (parts.length===3) return `${parts[0].padStart(2,'0')}/${parts[1].padStart(2,'0')}/${parts[2].trim()}`;
-      return String(d).split(',')[0];
-    }
-    const p = String(d).split('-');
-    return p.length===3 ? `${p[2]}/${p[1]}/${p[0]}` : d;
-  }
-  function toYMD(d) {
-    if (!d) return '';
-    if (/^\d{4}-\d{2}-\d{2}$/.test(String(d))) return d;
-    const p = String(d).split(',')[0].split('/');
-    return p.length===3 ? `${p[2].trim()}-${p[1].padStart(2,'0')}-${p[0].padStart(2,'0')}` : d;
-  }
-  function getUnit(name, qty) {
-    return '';
-  }
 
   // Obtener todos los pedidos del cliente ordenados por fecha (incluye cuentas anteriores vinculadas)
   const _effIdsRep2 = getEffectiveClientIds(cid);
@@ -1349,7 +1309,7 @@ function generateBonusHistoryReport(cid, fromStr, toStr) {
         const rows = pt.orders.map(po =>
           `<tr>
             <td style="padding:2px 0 2px 10px;font-size:12px;color:#374151">${fmtD(po.date)}${po.oc?' · Orden: '+po.oc:''}</td>
-            <td style="padding:2px 0;font-size:12px;color:#1e293b;font-weight:600;text-align:right">${po.qty} ${getUnit(pt.name,po.qty)}</td>
+            <td style="padding:2px 0;font-size:12px;color:#1e293b;font-weight:600;text-align:right">${po.qty}</td>
           </tr>`
         ).join('');
         return `<div style="margin-bottom:8px;padding:8px;background:#f8fafc;border-radius:6px;border-left:3px solid #64748b">
@@ -1358,7 +1318,7 @@ function generateBonusHistoryReport(cid, fromStr, toStr) {
             ${rows}
             <tr style="border-top:1px solid #e2e8f0">
               <td style="font-size:12px;font-weight:600;color:#374151;padding:3px 0">Total:</td>
-              <td style="font-size:12px;font-weight:700;color:#1e293b;text-align:right">${pt.qty} ${getUnit(pt.name,pt.qty)}</td>
+              <td style="font-size:12px;font-weight:700;color:#1e293b;text-align:right">${pt.qty}</td>
             </tr>
           </table>
         </div>`;
@@ -1637,13 +1597,13 @@ function generateBonusHistoryReport(cid, fromStr, toStr) {
             return `<div style="margin-bottom:8px;padding:8px;background:#f0f4ff;border-radius:6px;border-left:3px solid ${col}">
               <div style="font-size:12px;font-weight:700;color:#1e293b;margin-bottom:4px">${tituloPoolCurso}</div>
               <div style="display:flex;justify-content:space-between;font-size:11px;color:#374151;margin-bottom:3px">
-                <span>Meta: ${meta} ${getUnit(tName,meta)}</span>
+                <span>Meta: ${meta}</span>
                 <span style="color:${col};font-weight:700">${logro} / ${meta} (${pct}%)${pct>=100?' ✅':''}</span>
               </div>
               <div style="background:#e2e8f0;border-radius:4px;height:7px;margin-bottom:3px">
                 <div style="background:${col};width:${pct}%;height:7px;border-radius:4px"></div>
               </div>
-              <div style="font-size:11px;color:${restante>0?'#dc2626':'#374151'}">Restante: ${restante} ${getUnit(tName,restante)}</div>
+              <div style="font-size:11px;color:${restante>0?'#dc2626':'#374151'}">Restante: ${restante}</div>
             </div>`;
           }).join('') + `</div>`;
       }

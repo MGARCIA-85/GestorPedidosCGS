@@ -554,7 +554,6 @@ function askConfirm(msg, sub, cb, btnText, btnColor, icon) {
 function bonusAlertConfirm() { if (window._bonusAlertConfirmCb) window._bonusAlertConfirmCb(); window._bonusAlertConfirmCb=null; window._bonusAlertCancelCb=null; }
 function bonusAlertCancel()  { if (window._bonusAlertCancelCb)  window._bonusAlertCancelCb();  window._bonusAlertConfirmCb=null; window._bonusAlertCancelCb=null; }
 
-function bonusAlertCancel()  { if (window._bonusAlertCancelCb)  window._bonusAlertCancelCb();  window._bonusAlertConfirmCb=null; window._bonusAlertCancelCb=null; }
 
 
 function confirmDel(yes) {
@@ -606,13 +605,6 @@ function syncProductPrimarySpec(p) {
   if (primary && primary.unitSize != null) p.unitSize = primary.unitSize;
 }
 
-// Unidades por especificación a usar para una línea de pedido: la de la
-// especificación elegida (congelada u obtenida en vivo), o si no hay
-// ninguna, la del producto (comportamiento de siempre).
-function itemUnitSize(specOrNull, p) {
-  if (specOrNull && specOrNull.unitSize != null) return Number(specOrNull.unitSize);
-  return Number(p?.unitSize) || 1;
-}
 
 // Etiqueta de especificación a mostrar para una línea de pedido: usa la que
 // quedó "congelada" en el pedido al momento de venderse (it.specLabel); si
@@ -636,6 +628,52 @@ function itemSpecLabel(it, p) {
   return '';
 }
 
+// ── Cálculo de UNA línea para SAP (compartido por la vista del pedido y
+// por getSapCalcForOrder). Devuelve cantidad SAP (kilos si el producto se
+// factura por kilo, si no su unidad normal) y precio sin IVA redondeado
+// con la función que se le pase (truncar o redondeo normal).
+function sapCalcLine(p, qty, priceWithIva, weightKgPerQty, unitSizePerQty, roundFn) {
+  if (!p || !qty || priceWithIva == null) return null;
+  const unitSize = unitSizePerQty != null ? Number(unitSizePerQty) : (Number(p.unitSize) || 1);
+  const totalUnits = Number(qty) * unitSize;
+  const lineTotalWithIva = totalUnits * Number(priceWithIva);
+  let sapQty, sapUnitLabel;
+  if (p.facturaPorKilo) {
+    const w = weightKgPerQty != null ? Number(weightKgPerQty) : Number(p.weightKg || 0);
+    sapQty = Number(qty) * w;
+    sapUnitLabel = 'Kilo';
+  } else {
+    sapQty = totalUnits;
+    sapUnitLabel = p.unitLabel || 'unidad';
+  }
+  if (!sapQty) return null;
+  const sapPriceWithIva = lineTotalWithIva / sapQty;
+  const sapPriceNoIva = roundFn(sapPriceWithIva / 1.12);
+  const sapLineTotalWithIva = sapQty * sapPriceNoIva * 1.12;
+  const sapLineTotalNoIva = sapQty * sapPriceNoIva;
+  return { sapQty, sapUnitLabel, sapPriceNoIva, sapLineTotalWithIva, sapLineTotalNoIva };
+}
+
+// ── Fechas: helpers compartidos (antes repetidos en pedidos y bonificaciones) ──
+// dd/mm/yyyy (o "dd/mm/yyyy, hora") o yyyy-mm-dd  →  yyyy-mm-dd
+function toYMD(d) {
+  if (!d) return '';
+  if (/^\d{4}-\d{2}-\d{2}$/.test(String(d))) return d;
+  const p = String(d).split(',')[0].split('/');
+  return p.length===3 ? `${p[2].trim()}-${p[1].padStart(2,'0')}-${p[0].padStart(2,'0')}` : d;
+}
+// Cualquiera de los dos formatos  →  dd/mm/yyyy  ('—' si está vacía)
+function fmtD(d) {
+  if (!d) return '—';
+  if (String(d).includes('/')) {
+    const parts = String(d).split(',')[0].split('/');
+    if (parts.length===3) return `${parts[0].padStart(2,'0')}/${parts[1].padStart(2,'0')}/${parts[2].trim()}`;
+    return String(d).split(',')[0];
+  }
+  const p = String(d).split('-');
+  return p.length===3 ? `${p[2]}/${p[1]}/${p[0]}` : d;
+}
+
 // ── Modo SAP: cálculo compartido para mostrar un pedido convertido ─────
 // Un pedido marcado o.sapMode=true guarda sus datos reales intactos
 // (cantidad, precio con IVA, unidad de venta normal) — esta función NO
@@ -651,27 +689,8 @@ function getSapCalcForOrder(o) {
   const roundMode = o.sapRoundMode || 'floor';
   const roundFn = (n) => roundMode === 'round' ? Math.round(n*100)/100 : Math.floor(n*100)/100;
 
-  function calcLine(p, qty, priceWithIva, weightKgPerQty, unitSizePerQty) {
-    if (!p || !qty || priceWithIva == null) return null;
-    const unitSize = unitSizePerQty != null ? Number(unitSizePerQty) : (Number(p.unitSize) || 1);
-    const totalUnits = Number(qty) * unitSize;
-    const lineTotalWithIva = totalUnits * Number(priceWithIva);
-    let sapQty, sapUnitLabel;
-    if (p.facturaPorKilo) {
-      const w = weightKgPerQty != null ? Number(weightKgPerQty) : Number(p.weightKg || 0);
-      sapQty = Number(qty) * w;
-      sapUnitLabel = 'Kilo';
-    } else {
-      sapQty = totalUnits;
-      sapUnitLabel = p.unitLabel || 'unidad';
-    }
-    if (!sapQty) return null;
-    const sapPriceWithIva = lineTotalWithIva / sapQty;
-    const sapPriceNoIva = roundFn(sapPriceWithIva / 1.12);
-    const sapLineTotalWithIva = sapQty * sapPriceNoIva * 1.12;
-    const sapLineTotalNoIva = sapQty * sapPriceNoIva;
-    return { sapQty, sapUnitLabel, sapPriceNoIva, sapLineTotalWithIva, sapLineTotalNoIva };
-  }
+  const calcLine = (p, qty, priceWithIva, weightKgPerQty, unitSizePerQty) =>
+    sapCalcLine(p, qty, priceWithIva, weightKgPerQty, unitSizePerQty, roundFn);
 
   const items = (o.items||[]).map(it => {
     const p = S.products.find(x=>x.id===Number(it.productId));
