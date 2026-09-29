@@ -893,11 +893,18 @@ ${orderInfoHtml(o, {delivery:true})}
             return `<span style="color:#f1f5f9;font-size:10px;margin-right:8px">${t.name}${spec} = <span style="color:#f59e0b;font-weight:700">${t.qty}</span></span>`;
           }).join('');
 
+          // Color del mes según el estado de sus pedidos (los cancelados no cuentan):
+          // todos Concluido → verde; todos por lo menos Confirmado → azul; si no, blanco.
+          const activeOrds = g.orders.filter(o => !o.cancelled);
+          const monthColor = activeOrds.length && activeOrds.every(o => o.status === 'Concluido') ? '#4ade80'
+            : activeOrds.length && activeOrds.every(o => o.status === 'Confirmado' || o.status === 'Concluido') ? '#60a5fa'
+            : '#f1f5f9';
+
           const monthRows = g.orders.map(o => rows_map[o.id]||'').join('');
           return `<div style="margin-bottom:6px">
-            <div onclick="toggleCliMonthSec('${secId}')" style="cursor:pointer;padding:6px 8px;background:#161929;border-radius:6px;margin-bottom:4px;border-left:3px solid #3b82f6">
+            <div onclick="toggleCliMonthSec('${secId}')" style="cursor:pointer;padding:6px 8px;background:#161929;border-radius:6px;margin-bottom:4px;border-left:3px solid ${monthColor}">
               <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:${(summaryLine||bonusSummaryLine)?'4px':'0'}">
-                <span style="font-size:12px;color:#60a5fa;font-weight:700">📅 ${g.label} <span style="color:#64748b;font-size:10px">(${g.orders.length})</span></span>
+                <span style="font-size:12px;color:${monthColor};font-weight:700">📅 ${g.label} <span style="color:#64748b;font-size:10px">(${g.orders.length})</span></span>
                 <span style="color:#64748b;font-size:11px" id="${secId}-arrow">${isMonthOpen?'▲':'▼'}</span>
               </div>
               ${summaryLine?`<div style="display:flex;flex-wrap:wrap;gap:2px">${summaryLine}</div>`:''}
