@@ -900,11 +900,12 @@ ${orderInfoHtml(o, {delivery:true})}
             : activeOrds.length && activeOrds.every(o => o.status === 'Confirmado' || o.status === 'Concluido') ? '#60a5fa'
             : '#f1f5f9';
 
+          const hasCancelled = g.orders.some(o => o.cancelled);
           const monthRows = g.orders.map(o => rows_map[o.id]||'').join('');
           return `<div style="margin-bottom:6px">
             <div onclick="toggleCliMonthSec('${secId}')" style="cursor:pointer;padding:6px 8px;background:#161929;border-radius:6px;margin-bottom:4px;border-left:3px solid ${monthColor}">
               <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:${(summaryLine||bonusSummaryLine)?'4px':'0'}">
-                <span style="font-size:12px;color:${monthColor};font-weight:700">📅 ${g.label} <span style="color:#64748b;font-size:10px">(${g.orders.length})</span></span>
+                <span style="font-size:12px;color:${monthColor};font-weight:700">📅 ${g.label} <span style="color:#64748b;font-size:10px">(${g.orders.length})</span>${hasCancelled?' <span style="font-size:10px;opacity:0.6" title="Hubo un pedido cancelado este mes">🚫</span>':''}</span>
                 <span style="color:#64748b;font-size:11px" id="${secId}-arrow">${isMonthOpen?'▲':'▼'}</span>
               </div>
               ${summaryLine?`<div style="display:flex;flex-wrap:wrap;gap:2px">${summaryLine}</div>`:''}
