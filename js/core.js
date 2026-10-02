@@ -624,17 +624,22 @@ function syncProductPrimarySpec(p) {
 
 
 // Etiqueta de especificación a mostrar para una línea de pedido: usa la que
-// quedó "congelada" en el pedido al momento de venderse (it.specLabel); si
-// el pedido es de antes de que existiera esto, intenta encontrarla de
-// varias formas antes de rendirse: por el specId guardado, por el "espejo"
-// del producto (p.presentation), por su especificación activa, o por la
-// primera que tenga — así no depende de que ese espejo esté al día.
+// quedó "congelada" en el pedido al momento de venderse (it.specLabel).
+// Si el pedido es de antes de que existiera eso, y SÍ se había elegido una
+// especificación (it.specId), se busca esa misma por su id — aunque hoy
+// esté inactiva, para respetar cuál era en ese momento. Si esa
+// especificación ya no existe (se borró del producto), NO se sustituye
+// por la activa actual: eso mostraría una especificación equivocada, así
+// que mejor no mostrar ninguna. Solo cuando nunca se eligió ninguna
+// (it.specId es null — pedidos de antes de que el producto tuviera más
+// de una variante) se usa el valor general del producto, porque ahí sí
+// no había ambigüedad en su momento.
 function itemSpecLabel(it, p) {
   if (it && it.specLabel) return it.specLabel;
   if (!p) return '';
-  if (it && it.specId != null && p.specs) {
-    const bySpecId = p.specs.find(s => String(s.id) === String(it.specId));
-    if (bySpecId && bySpecId.label) return bySpecId.label;
+  if (it && it.specId != null) {
+    const bySpecId = (p.specs || []).find(s => String(s.id) === String(it.specId));
+    return bySpecId ? (bySpecId.label || '') : '';
   }
   if (p.presentation) return p.presentation;
   if (p.specs && p.specs.length) {

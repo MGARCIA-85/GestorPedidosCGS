@@ -863,34 +863,34 @@ ${orderInfoHtml(o, {delivery:true})}
           const secId = `cso-month-${c.id}-${key}`;
           const isMonthOpen = window._cliSecOpen && window._cliSecOpen[secId] === true;
 
-          // Resumen de productos del mes
+          // Resumen de productos del mes — sin especificación, porque en un
+          // mismo mes se pudieron vender distintas especificaciones del
+          // mismo producto, y mostrar solo una sería engañoso.
           const monthTotals = {};
           g.orders.forEach(o => {
             o.items.forEach(it => {
               const p = S.products.find(x=>x.id===it.productId);
               if (!p) return;
-              if (!monthTotals[it.productId]) monthTotals[it.productId] = {name:p.name, spec:p.presentation||'', qty:0};
+              if (!monthTotals[it.productId]) monthTotals[it.productId] = {name:p.name, qty:0};
               monthTotals[it.productId].qty += Number(it.qty);
             });
           });
           const summaryLine = Object.values(monthTotals).map(t=>{
-            const spec = t.spec?` (${t.spec})`:'';
-            return `<span style="color:#f1f5f9;font-size:10px;margin-right:8px">${t.name}${spec} = <span style="color:#10b981;font-weight:700">${t.qty}</span></span>`;
+            return `<span style="color:#f1f5f9;font-size:10px;margin-right:8px">${t.name} = <span style="color:#10b981;font-weight:700">${t.qty}</span></span>`;
           }).join('');
 
-          // Resumen de productos bonificados del mes
+          // Resumen de productos bonificados del mes (mismo criterio)
           const monthBonusTotals = {};
           g.orders.forEach(o => {
             (o.bonusLines||[]).forEach(bl => {
               const p = S.products.find(x=>x.id===Number(bl.productId));
               if (!p) return;
-              if (!monthBonusTotals[bl.productId]) monthBonusTotals[bl.productId] = {name:p.name, spec:p.presentation||'', qty:0};
+              if (!monthBonusTotals[bl.productId]) monthBonusTotals[bl.productId] = {name:p.name, qty:0};
               monthBonusTotals[bl.productId].qty += Number(bl.qty);
             });
           });
           const bonusSummaryLine = Object.values(monthBonusTotals).map(t=>{
-            const spec = t.spec?` (${t.spec})`:'';
-            return `<span style="color:#f1f5f9;font-size:10px;margin-right:8px">${t.name}${spec} = <span style="color:#f59e0b;font-weight:700">${t.qty}</span></span>`;
+            return `<span style="color:#f1f5f9;font-size:10px;margin-right:8px">${t.name} = <span style="color:#f59e0b;font-weight:700">${t.qty}</span></span>`;
           }).join('');
 
           // Color del mes según el estado de sus pedidos (los cancelados no cuentan):
