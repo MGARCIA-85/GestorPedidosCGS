@@ -393,11 +393,9 @@ if (snapshotUnitSize != null) {
   unitSize = Number(snapshotUnitSize);
 } else {
   unitSize = Number(p.unitSize) || 1;
-  if (specId != null) {
-    ensureProductSpecs(p);
-    const spec = p.specs.find(s => String(s.id) === String(specId));
-    if (spec && spec.unitSize != null) unitSize = Number(spec.unitSize);
-  }
+  ensureProductSpecs(p);
+  const spec = historicalSpec({ specId }, p);
+  if (spec && spec.unitSize != null) unitSize = Number(spec.unitSize);
 }
 return pr * unitSize * Number(qty);
 }
@@ -452,15 +450,39 @@ function migrateFreezeOrderPrices() {
   if (changed) save();
 }
 
+// La especificación con el id más bajo que todavía exista en el producto.
+// Los ids nunca se reutilizan (cada nueva especificación recibe
+// maxId+1), así que la de id más bajo es siempre la más antigua, aunque
+// se hayan borrado otras desde entonces.
+function oldestSpec(p) {
+  const specs = (p && p.specs) || [];
+  return specs.reduce((oldest, s) => (!oldest || Number(s.id) < Number(oldest.id)) ? s : oldest, null);
+}
+
+// La especificación que mejor corresponde a una línea de pedido cuando no
+// quedó "congelada": si en su momento se eligió una (it.specId) y
+// todavía existe, esa misma — aunque hoy esté inactiva. Si nunca se
+// eligió ninguna (pedidos de antes de que el producto tuviera varias
+// especificaciones), la MÁS ANTIGUA, no la que esté activa hoy, porque
+// esas fueron las que se agregaron después.
+function historicalSpec(it, p) {
+  if (!p) return null;
+  const specs = p.specs || [];
+  if (it && it.specId != null) {
+    return specs.find(s => String(s.id) === String(it.specId)) || null;
+  }
+  return oldestSpec(p);
+}
+
 // Unidades por especificación a usar para mostrar una línea de pedido: la
 // que quedó "congelada" en el pedido (it.specUnitSize); si no la tiene
-// (pedidos de antes de esto), la de la especificación elegida en vivo; si
-// tampoco, la del producto (comportamiento de siempre).
+// (pedidos de antes de esto), la de la especificación histórica (ver
+// historicalSpec); si tampoco, la del producto (comportamiento de siempre).
 function itemUnitSizeFor(it, p) {
   if (it && it.specUnitSize != null) return Number(it.specUnitSize);
-  if (it && it.specId != null && p) {
+  if (it && p) {
     ensureProductSpecs(p);
-    const spec = p.specs.find(s => String(s.id) === String(it.specId));
+    const spec = historicalSpec(it, p);
     if (spec && spec.unitSize != null) return Number(spec.unitSize);
   }
   return Number(p?.unitSize) || 1;
@@ -625,29 +647,19 @@ function syncProductPrimarySpec(p) {
 
 // Etiqueta de especificación a mostrar para una línea de pedido: usa la que
 // quedó "congelada" en el pedido al momento de venderse (it.specLabel).
-// Si el pedido es de antes de que existiera eso, y SÍ se había elegido una
-// especificación (it.specId), se busca esa misma por su id — aunque hoy
-// esté inactiva, para respetar cuál era en ese momento. Si esa
-// especificación ya no existe (se borró del producto), NO se sustituye
-// por la activa actual: eso mostraría una especificación equivocada, así
-// que mejor no mostrar ninguna. Solo cuando nunca se eligió ninguna
-// (it.specId es null — pedidos de antes de que el producto tuviera más
-// de una variante) se usa el valor general del producto, porque ahí sí
-// no había ambigüedad en su momento.
+// Si el pedido es de antes de que existiera eso, usa historicalSpec():
+// si SÍ se había elegido una (it.specId) y todavía existe, esa misma,
+// aunque hoy esté inactiva; si ya no existe (se borró del producto), no
+// se sustituye por otra — mejor no mostrar ninguna que mostrar una
+// equivocada; y si nunca se eligió ninguna (pedidos de antes de que el
+// producto tuviera más de una), la MÁS ANTIGUA, porque esa fue la que
+// existía en ese momento — no la que esté activa hoy, ya que las demás
+// se agregaron después.
 function itemSpecLabel(it, p) {
   if (it && it.specLabel) return it.specLabel;
   if (!p) return '';
-  if (it && it.specId != null) {
-    const bySpecId = (p.specs || []).find(s => String(s.id) === String(it.specId));
-    return bySpecId ? (bySpecId.label || '') : '';
-  }
-  if (p.presentation) return p.presentation;
-  if (p.specs && p.specs.length) {
-    const active = p.specs.filter(s => s.active);
-    if (active[0] && active[0].label) return active[0].label;
-    if (p.specs[0] && p.specs[0].label) return p.specs[0].label;
-  }
-  return '';
+  const spec = historicalSpec(it, p);
+  return spec ? (spec.label || '') : '';
 }
 
 // ── Cálculo de UNA línea para SAP (compartido por la vista del pedido y
@@ -979,7 +991,7 @@ function getSapCalcForOrder(o) {
     const p = S.products.find(x=>x.id===Number(it.productId));
     if (!p) return null;
     ensureProductSpecs(p);
-    const spec = p.specs.find(s=>String(s.id)===String(it.specId));
+    const spec = historicalSpec(it, p);
     const r = calcLine(p, it.qty, it.customPrice, spec?spec.weightKg:null, spec?spec.unitSize:(it.specUnitSize!=null?it.specUnitSize:null));
     if (!r) return null;
     return { ...r, productId: p.id, name: p.name, specLabel: spec?spec.label:(it.specLabel||''), qty: it.qty };
@@ -989,8 +1001,7 @@ function getSapCalcForOrder(o) {
     const p = S.products.find(x=>x.id===Number(bl.productId));
     if (!p) return null;
     ensureProductSpecs(p);
-    const activeSpecs = p.specs.filter(s=>s.active);
-    const spec = p.specs.find(s=>String(s.id)===String(bl.specId)) || (activeSpecs.length<=1 ? (activeSpecs[0]||p.specs[0]) : null);
+    const spec = historicalSpec(bl, p);
     const r = calcLine(p, bl.qty, bl.price, spec?spec.weightKg:null, spec?spec.unitSize:null);
     if (!r) return null;
     return { ...r, productId: p.id, name: p.name, specLabel: spec?spec.label:'', qty: bl.qty, ruleName: bl.ruleName, exceptional: bl.exceptional };
@@ -1072,7 +1083,7 @@ function renderSfTable() {
     const p = S.products.find(x=>x.id===Number(it.productId));
     if (!p) return null;
     ensureProductSpecs(p);
-    const spec = p.specs.find(s=>String(s.id)===String(it.specId));
+    const spec = historicalSpec(it, p);
     const weightPerQty = it.specWeightKg != null ? it.specWeightKg : (spec ? spec.weightKg : p.weightKg);
     const w = Number(weightPerQty) || 0;
     const kilos = Number(it.qty) * w;
