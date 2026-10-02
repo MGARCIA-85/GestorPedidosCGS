@@ -181,30 +181,14 @@ function updateCliSelBar() {
   if (n === 0) {
     bar.style.display = 'none';
     if (filtersRow) filtersRow.style.display = '';
-    const _cp = document.getElementById('page-clients'); if (_cp) _cp.style.paddingTop = '';
     return;
   }
   if (filtersRow) filtersRow.style.display = 'none';
-  bar.style.top = _getNavBottom() + 'px';
+  // position:sticky reserva su propio espacio automáticamente — ya no
+  // hace falta calcular ni empujar nada a mano.
   bar.style.display = 'flex';
   const cnt = bar.querySelector('#cli-sel-count');
   if (cnt) cnt.textContent = n + ' cliente' + (n!==1?'s':'') + ' seleccionado' + (n!==1?'s':'');
-  // Empujar lista para que no quede tapada por la barra
-  setTimeout(() => {
-    const barH = bar.offsetHeight;
-    const page = document.getElementById('page-clients');
-    if (page) {
-      const oldPad = parseInt(page.style.paddingTop) || 0;
-      const barBottom = bar.getBoundingClientRect().bottom;
-      const pageTop = page.getBoundingClientRect().top;
-      const newPad = Math.max(0, barBottom - pageTop + oldPad);
-      if (Math.abs(newPad - oldPad) > 2) {
-        const diff = newPad - oldPad;
-        page.style.paddingTop = newPad + 'px';
-        window.scrollBy(0, diff);
-      }
-    }
-  }, 50);
 }
 
 function applyMassCliEdit() {

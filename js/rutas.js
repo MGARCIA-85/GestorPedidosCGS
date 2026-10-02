@@ -591,11 +591,10 @@ function updateRouteSelBar() {
   const n = allSel.length;
   if (n === 0) {
     bar.style.display = 'none';
-    const page = document.getElementById('page-routes');
-    if (page) page.style.paddingTop = '';
     return;
   }
-  bar.style.top = _getNavBottom() + 'px';
+  // position:sticky reserva su propio espacio automáticamente — ya no
+  // hace falta calcular ni empujar nada a mano.
   bar.style.display = 'flex';
   document.getElementById('route-sel-count').textContent = n + ' pedido' + (n!==1?'s':'') + ' seleccionado' + (n!==1?'s':'');
   // Resumen
@@ -610,21 +609,6 @@ function updateRouteSelBar() {
   const prodLines = Object.entries(prods).map(([k,v])=>`• ${k}: <strong style="color:#f1f5f9">${v}</strong>`).join(' &nbsp;');
   document.getElementById('route-sel-summary').innerHTML =
     `<div style="color:#f59e0b;font-weight:700;margin-bottom:3px">Total: ${Q(total)}</div>${prodLines}`;
-  setTimeout(() => {
-    const barH = bar.offsetHeight;
-    const _rp = document.getElementById('page-routes');
-    if (_rp) {
-      const oldPad = parseInt(_rp.style.paddingTop) || 0;
-      const barBottom = bar.getBoundingClientRect().bottom;
-      const pageTop = _rp.getBoundingClientRect().top;
-      const newPad = Math.max(0, barBottom - pageTop + oldPad);
-      if (Math.abs(newPad - oldPad) > 2) {
-        const diff = newPad - oldPad;
-        _rp.style.paddingTop = newPad + 'px';
-        window.scrollBy(0, diff);
-      }
-    }
-  }, 50);
 }
 
 function selectAllRouteVisible() {

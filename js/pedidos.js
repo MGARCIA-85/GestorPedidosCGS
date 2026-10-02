@@ -2017,26 +2017,24 @@ function toggleOrdSel(oid, checked) {
   updateOrdSelBar();
 }
 
-function _getNavBottom() {
-  const nav = document.getElementById('nav');
-  const hdr = document.querySelector('.app-header');
-  let top = 0;
-  if (hdr) top += hdr.offsetHeight;
-  if (nav) top += nav.offsetHeight;
-  return top;
-}
-
 function updateOrdSelBar() {
   const bar = document.getElementById('ord-sel-bar');
   const n = (window._ordSel||new Set()).size;
   if (!bar) return;
+  // Mientras hay selección activa, la fila "Pedidos/Recientes/Filtro/+Nuevo"
+  // y las pestañas de estado quedan de más (sus funciones ya están dentro
+  // de esta barra) — se esconden para no competir por el mismo espacio.
+  const actionsRow = document.getElementById('ord-actions-row');
+  const statusTabs = document.getElementById('ord-status-tabs');
+  if (actionsRow) actionsRow.style.display = n ? 'none' : '';
+  if (statusTabs) statusTabs.style.display = n ? 'none' : '';
   if (n === 0) {
     bar.style.display = 'none';
-    const page = document.getElementById('page-list');
-    if (page) page.style.paddingTop = '';
     return;
   }
-  bar.style.top = _getNavBottom() + 'px';
+  // position:sticky reserva su propio espacio automáticamente — ya no
+  // hace falta calcular ni empujar nada a mano (eso era lo que dejaba un
+  // espacio vacío al scrollear, y escondía paneles como el de filtros).
   bar.style.display = 'flex';
   document.getElementById('ord-sel-count').textContent = n + ' pedido' + (n!==1?'s':'') + ' seleccionado' + (n!==1?'s':'');
   // Resumen: total y clientes
@@ -2051,22 +2049,6 @@ function updateOrdSelBar() {
   const prodLines = Object.entries(prods).map(([k,v])=>`• ${k}: <strong style="color:#f1f5f9">${v}</strong>`).join(' &nbsp;');
   document.getElementById('ord-sel-summary').innerHTML =
     `<div style="color:#f59e0b;font-weight:700;margin-bottom:3px">Total: ${Q(total)}</div>${prodLines}`;
-  setTimeout(() => {
-    const page = document.getElementById('page-list');
-    if (page) {
-      // El espacio que hay que reservar es solo la altura de esta barra —
-      // un valor fijo, sin importar cuánto se haya scrolleado. Calcularlo
-      // a partir de la posición en pantalla (como antes) se rompía entre
-      // más abajo estuviera la lista, dejando un espacio vacío enorme.
-      const oldPad = parseInt(page.style.paddingTop) || 0;
-      const newPad = bar.offsetHeight;
-      if (Math.abs(newPad - oldPad) > 2) {
-        const diff = newPad - oldPad;
-        page.style.paddingTop = newPad + 'px';
-        window.scrollBy(0, diff);
-      }
-    }
-  }, 80);
 }
 
 function clearOrdSel() {
