@@ -2052,12 +2052,14 @@ function updateOrdSelBar() {
   document.getElementById('ord-sel-summary').innerHTML =
     `<div style="color:#f59e0b;font-weight:700;margin-bottom:3px">Total: ${Q(total)}</div>${prodLines}`;
   setTimeout(() => {
-    const barBottom = bar.getBoundingClientRect().bottom;
     const page = document.getElementById('page-list');
     if (page) {
+      // El espacio que hay que reservar es solo la altura de esta barra —
+      // un valor fijo, sin importar cuánto se haya scrolleado. Calcularlo
+      // a partir de la posición en pantalla (como antes) se rompía entre
+      // más abajo estuviera la lista, dejando un espacio vacío enorme.
       const oldPad = parseInt(page.style.paddingTop) || 0;
-      const pageTop = page.getBoundingClientRect().top;
-      const newPad = Math.max(0, barBottom - pageTop + oldPad);
+      const newPad = bar.offsetHeight;
       if (Math.abs(newPad - oldPad) > 2) {
         const diff = newPad - oldPad;
         page.style.paddingTop = newPad + 'px';
