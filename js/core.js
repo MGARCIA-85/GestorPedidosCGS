@@ -446,10 +446,10 @@ function ordersSummaryHtml(orders) {
       }
     });
   });
-  const totalsLine = `<div style="color:#f59e0b;font-weight:700;margin-bottom:6px">• Total: ${Q(totalMoney)} &nbsp;&nbsp;&nbsp; • Total: ${_sfFmtKilos(totalKilos)} kilos</div>`;
+  const totalsLine = `<div style="color:#f59e0b;font-weight:700;font-size:11px;margin-bottom:5px">• Total: ${Q(totalMoney)} &nbsp;&nbsp;&nbsp; • Total: ${_sfFmtKilos(totalKilos)} Kg</div>`;
   const entries = Object.values(prodTotals).map(t => {
-    const kilosTxt = t.kilos ? ` (${_sfFmtKilos(t.kilos)} kilos)` : '';
-    return `<span style="color:#f1f5f9;font-size:11px;margin-right:10px">• ${t.name}: <strong style="color:#10b981">${t.qty}</strong>${kilosTxt}</span>`;
+    const kilosTxt = t.kilos ? ` (${_sfFmtKilos(t.kilos)} Kg)` : '';
+    return `<span style="color:#f1f5f9;font-size:10px;margin-right:10px">• ${t.name}: <strong style="color:#10b981">${t.qty}</strong>${kilosTxt}</span>`;
   });
   let rows = '';
   for (let i = 0; i < entries.length; i += 2) rows += `<div style="margin-bottom:3px">${entries.slice(i, i+2).join('')}</div>`;

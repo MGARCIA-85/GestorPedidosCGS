@@ -887,18 +887,23 @@ ${orderInfoHtml(o, {delivery:true})}
           // una sería engañoso (el peso en kilos sí usa la de cada línea).
           const summaryLine = ordersSummaryHtml(g.orders);
 
-          // Resumen de productos bonificados del mes (mismo criterio)
+          // Resumen de productos bonificados del mes (mismo criterio; sin
+          // Total en dinero, pero sí con sus kilos)
           const monthBonusTotals = {};
           g.orders.forEach(o => {
             (o.bonusLines||[]).forEach(bl => {
               const p = S.products.find(x=>x.id===Number(bl.productId));
               if (!p) return;
-              if (!monthBonusTotals[bl.productId]) monthBonusTotals[bl.productId] = {name:p.name, qty:0};
+              if (!monthBonusTotals[bl.productId]) monthBonusTotals[bl.productId] = {name:p.name, qty:0, kilos:0};
               monthBonusTotals[bl.productId].qty += Number(bl.qty);
+              const spec = historicalSpec(bl, p);
+              const w = bl.specWeightKg != null ? bl.specWeightKg : (spec ? spec.weightKg : p.weightKg);
+              if (w) monthBonusTotals[bl.productId].kilos += Number(bl.qty) * Number(w);
             });
           });
           const bonusSummaryLine = Object.values(monthBonusTotals).map(t=>{
-            return `<span style="color:#f1f5f9;font-size:10px;margin-right:8px">${t.name} = <span style="color:#f59e0b;font-weight:700">${t.qty}</span></span>`;
+            const kilosTxt = t.kilos ? ` (${_sfFmtKilos(t.kilos)} Kg)` : '';
+            return `<span style="color:#f1f5f9;font-size:10px;margin-right:8px">${t.name} = <span style="color:#f59e0b;font-weight:700">${t.qty}</span>${kilosTxt}</span>`;
           }).join('');
 
           // Color del mes según el estado de sus pedidos (los cancelados no cuentan):
