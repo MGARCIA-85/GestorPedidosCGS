@@ -2030,6 +2030,12 @@ function updateOrdSelBar() {
   if (statusTabs) statusTabs.style.display = n ? 'none' : '';
   if (n === 0) {
     bar.style.display = 'none';
+    // El orden elegido mientras había selección activa se pierde al quedar sin selección.
+    if (_orderAsc) {
+      _orderAsc = false;
+      const btn = document.getElementById('btn-ord-sort'); if (btn) btn.textContent = '🕐 Recientes';
+      renderList();
+    }
     return;
   }
   // position:sticky reserva su propio espacio automáticamente — ya no
@@ -2037,18 +2043,9 @@ function updateOrdSelBar() {
   // espacio vacío al scrollear, y escondía paneles como el de filtros).
   bar.style.display = 'flex';
   document.getElementById('ord-sel-count').textContent = n + ' pedido' + (n!==1?'s':'') + ' seleccionado' + (n!==1?'s':'');
-  // Resumen: total y clientes
+  // Resumen: total, kilos y productos (formato compartido con Rutas y la ficha del cliente)
   const selOrds = [...(window._ordSel)].map(id => S.orders.find(o=>o.id===id)).filter(Boolean);
-  const total = selOrds.reduce((s,o)=>s+orderTotalWithIva(o),0);
-  const prods = {};
-  selOrds.forEach(o => o.items.forEach(it => {
-    const p = S.products.find(x=>x.id===(it.productId||Number(it.pid)));
-    const k = (p?p.name:'—');
-    prods[k] = (prods[k]||0) + Number(it.qty);
-  }));
-  const prodLines = Object.entries(prods).map(([k,v])=>`• ${k}: <strong style="color:#f1f5f9">${v}</strong>`).join(' &nbsp;');
-  document.getElementById('ord-sel-summary').innerHTML =
-    `<div style="color:#f59e0b;font-weight:700;margin-bottom:3px">Total: ${Q(total)}</div>${prodLines}`;
+  document.getElementById('ord-sel-summary').innerHTML = ordersSummaryHtml(selOrds);
 }
 
 function clearOrdSel() {

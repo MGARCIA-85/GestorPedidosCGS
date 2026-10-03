@@ -272,8 +272,15 @@ function toggleCliMonthSec(secId) {
   if (arrow) arrow.textContent = opening ? '▲' : '▼';
 }
 
+function toggleCliOrdSel(cid, oid, checked) {
+  if (!window._cliOrdSel) window._cliOrdSel = new Set();
+  if (checked) window._cliOrdSel.add(oid); else window._cliOrdSel.delete(oid);
+  updateCliOrdSummary(cid);
+}
+
 function updateCliOrdSummary(cid) {
-  const chks = document.querySelectorAll(`.cli-ord-chk[data-cid="${cid}"]:checked`);
+  const sel = window._cliOrdSel || new Set();
+  const chks = [...document.querySelectorAll(`.cli-ord-chk[data-cid="${cid}"]`)].filter(chk => sel.has(Number(chk.dataset.oid)));
 
   let panel = document.getElementById('cli-ord-fixed-summary');
   if (!panel) {
@@ -283,42 +290,24 @@ function updateCliOrdSummary(cid) {
     document.body.appendChild(panel);
   }
 
-  if (!chks.length) { panel.style.display = 'none'; return; }
+  if (!chks.length) {
+    panel.style.display = 'none';
+    if (window._cliOrdAsc) { window._cliOrdAsc = false; renderClients(); } // el orden elegido se pierde al quedar sin selección
+    return;
+  }
 
-  const totals = {};
-  let kilos = 0;
-  chks.forEach(chk => {
-    const oid = Number(chk.dataset.oid);
-    const o = S.orders.find(x => x.id === oid);
-    if (!o) return;
-    o.items.forEach(it => {
-      const p = S.products.find(x => x.id === it.productId);
-      if (!p) return;
-      const key = it.productId;
-      if (!totals[key]) totals[key] = { name: p.name, qty: 0 };
-      totals[key].qty += Number(it.qty);
-      const spec = historicalSpec(it, p);
-      const w = it.specWeightKg != null ? it.specWeightKg : (spec ? spec.weightKg : p.weightKg);
-      if (w) kilos += Number(it.qty) * Number(w);
-    });
-  });
-
-  const lines = Object.values(totals).map(t => {
-    return `<span style="color:#f1f5f9;font-weight:600;margin-right:10px">${t.name} = <span style="color:#10b981">${t.qty}</span></span>`;
-  }).join('');
-  const kilosLine = kilos ? `<div style="font-size:11px;color:#94a3b8;margin-bottom:4px">⚖️ Kilos: <strong style="color:#f1f5f9">${_sfFmtKilos(kilos)}</strong></div>` : '';
+  const selOrds = [...chks].map(chk => S.orders.find(x => x.id === Number(chk.dataset.oid))).filter(Boolean);
 
   panel.innerHTML = `
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
       <span style="font-size:11px;color:#4ade80;font-weight:700">📊 RESUMEN — ${chks.length} pedido(s)</span>
       <div style="display:flex;gap:6px">
         <button onclick="selectAllCliOrds(${cid})" style="background:transparent;border:1px solid #10b981;border-radius:5px;color:#10b981;padding:2px 8px;font-size:11px;cursor:pointer">✔ Todos</button>
         <button onclick="clearCliOrdSel(${cid})" style="background:transparent;border:1px solid #ef4444;border-radius:5px;color:#ef4444;padding:2px 8px;font-size:11px;cursor:pointer">✕ Limpiar</button>
       </div>
     </div>
-    ${kilosLine}
-    <div style="display:flex;flex-wrap:wrap;gap:4px;font-size:12px;margin-bottom:8px">${lines}</div>
-    <div style="display:flex;gap:6px;margin-bottom:6px">
+    ${ordersSummaryHtml(selOrds)}
+    <div style="display:flex;gap:6px;margin:8px 0 6px">
       <button onclick="toggleCliOrdSort()" style="flex:1;padding:7px 10px;background:transparent;border:1px solid #475569;border-radius:7px;color:#94a3b8;font-size:12px;font-weight:700;cursor:pointer" id="btn-cli-ord-sort">🕐 ${window._cliOrdAsc?'Antiguos':'Recientes'}</button>
     </div>
     <div style="display:flex;flex-direction:column;gap:6px">
@@ -331,12 +320,12 @@ function updateCliOrdSummary(cid) {
 // Reutilizan el "Detalle"/"Enviar" de Pedidos generales, con los pedidos
 // marcados aquí dentro de la ficha del cliente.
 function generateOrderReportFromCli(cid) {
-  const ids = [...document.querySelectorAll(`.cli-ord-chk[data-cid="${cid}"]:checked`)].map(chk => Number(chk.dataset.oid));
+  const ids = [...(window._cliOrdSel||new Set())];
   if (!ids.length) return toast('Selecciona al menos un pedido', '#f59e0b');
   generateOrderReport(ids);
 }
 function shareOrderReportFromCli(cid) {
-  const ids = [...document.querySelectorAll(`.cli-ord-chk[data-cid="${cid}"]:checked`)].map(chk => Number(chk.dataset.oid));
+  const ids = [...(window._cliOrdSel||new Set())];
   if (!ids.length) return toast('Selecciona al menos un pedido', '#f59e0b');
   const prevSel = window._ordSel; // no perder una selección que estuviera activa en Pedidos generales
   window._ordSel = new Set(ids);
@@ -352,14 +341,22 @@ function toggleCliOrdSort() {
 }
 
 function selectAllCliOrds(cid) {
-  document.querySelectorAll(`.cli-ord-chk[data-cid="${cid}"]`).forEach(chk => chk.checked = true);
+  if (!window._cliOrdSel) window._cliOrdSel = new Set();
+  document.querySelectorAll(`.cli-ord-chk[data-cid="${cid}"]`).forEach(chk => {
+    window._cliOrdSel.add(Number(chk.dataset.oid));
+    chk.checked = true;
+  });
   updateCliOrdSummary(cid);
 }
 
 function clearCliOrdSel(cid) {
-  document.querySelectorAll(`.cli-ord-chk[data-cid="${cid}"]`).forEach(chk => chk.checked = false);
+  document.querySelectorAll(`.cli-ord-chk[data-cid="${cid}"]`).forEach(chk => {
+    if (window._cliOrdSel) window._cliOrdSel.delete(Number(chk.dataset.oid));
+    chk.checked = false;
+  });
   const panel = document.getElementById('cli-ord-fixed-summary');
   if (panel) panel.style.display = 'none';
+  if (window._cliOrdAsc) { window._cliOrdAsc = false; renderClients(); } // el orden elegido se pierde al limpiar
 }
 
 function openQuoteFromCli(oid) {
@@ -838,7 +835,8 @@ ${(()=>{
       ${_isInherited?`<div style="font-size:10px;color:#a855f7;font-weight:700;margin-bottom:4px">📁 Cuenta anterior</div>`:''}
       <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:6px">
         <div style="display:flex;align-items:flex-start;gap:8px">
-          <input type="checkbox" class="cli-ord-chk" data-cid="${c.id}" data-oid="${o.id}" onchange="updateCliOrdSummary(${c.id})"
+          <input type="checkbox" class="cli-ord-chk" data-cid="${c.id}" data-oid="${o.id}" onchange="toggleCliOrdSel(${c.id},${o.id},this.checked)"
+            ${(window._cliOrdSel||new Set()).has(o.id)?'checked':''}
             style="width:15px;height:15px;margin-top:3px;accent-color:#10b981;cursor:pointer;flex-shrink:0"/>
           <div>
 ${orderInfoHtml(o, {delivery:true})}
@@ -882,21 +880,12 @@ ${orderInfoHtml(o, {delivery:true})}
           const secId = `cso-month-${c.id}-${key}`;
           const isMonthOpen = window._cliSecOpen && window._cliSecOpen[secId] === true;
 
-          // Resumen de productos del mes — sin especificación, porque en un
-          // mismo mes se pudieron vender distintas especificaciones del
-          // mismo producto, y mostrar solo una sería engañoso.
-          const monthTotals = {};
-          g.orders.forEach(o => {
-            o.items.forEach(it => {
-              const p = S.products.find(x=>x.id===it.productId);
-              if (!p) return;
-              if (!monthTotals[it.productId]) monthTotals[it.productId] = {name:p.name, qty:0};
-              monthTotals[it.productId].qty += Number(it.qty);
-            });
-          });
-          const summaryLine = Object.values(monthTotals).map(t=>{
-            return `<span style="color:#f1f5f9;font-size:10px;margin-right:8px">${t.name} = <span style="color:#10b981;font-weight:700">${t.qty}</span></span>`;
-          }).join('');
+          // Resumen de productos del mes — mismo formato que los demás
+          // resúmenes de pedidos seleccionados (total, kilos, 2 por fila).
+          // Sin especificación: en un mismo mes se pudieron vender
+          // distintas especificaciones del mismo producto, y mostrar solo
+          // una sería engañoso (el peso en kilos sí usa la de cada línea).
+          const summaryLine = ordersSummaryHtml(g.orders);
 
           // Resumen de productos bonificados del mes (mismo criterio)
           const monthBonusTotals = {};
@@ -927,7 +916,7 @@ ${orderInfoHtml(o, {delivery:true})}
                 <span style="font-size:12px;color:${monthColor};font-weight:700">📅 ${g.label} <span style="color:#64748b;font-size:10px">(${g.orders.length})</span>${hasCancelled?' <span style="font-size:10px;opacity:0.6" title="Hubo un pedido cancelado este mes">🚫</span>':''}</span>
                 <span style="color:#64748b;font-size:11px" id="${secId}-arrow">${isMonthOpen?'▲':'▼'}</span>
               </div>
-              ${summaryLine?`<div style="display:flex;flex-wrap:wrap;gap:2px">${summaryLine}</div>`:''}
+              ${summaryLine}
               ${bonusSummaryLine?`<div style="display:flex;flex-wrap:wrap;gap:2px;align-items:center;margin-top:3px"><span style="font-size:10px;color:#f59e0b;font-weight:700;margin-right:4px">🎁 Bonificado:</span>${bonusSummaryLine}</div>`:''}
             </div>
             <div id="${secId}" style="display:${isMonthOpen?'block':'none'}">${monthRows}</div>

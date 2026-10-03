@@ -421,6 +421,41 @@ function orderTotalWithIva(o, sapCalc) {
   return o.applyIva ? t * 1.12 : t;
 }
 
+// Resumen de un grupo de pedidos: "• Total: Qxxx  • Total: xxx kilos" y,
+// debajo, cada producto con su cantidad y sus kilos, 2 por fila. Una sola
+// versión compartida por los 4 lugares que lo usan: seleccionados en
+// Pedidos generales, seleccionados en Rutas, seleccionados en la ficha
+// del cliente, y el resumen por mes de la ficha del cliente.
+function ordersSummaryHtml(orders) {
+  let totalMoney = 0, totalKilos = 0;
+  const prodTotals = {};
+  (orders || []).forEach(o => {
+    totalMoney += orderTotalWithIva(o);
+    (o.items || []).forEach(it => {
+      const p = S.products.find(x => x.id === (it.productId || Number(it.pid)));
+      if (!p) return;
+      const key = it.productId || it.pid;
+      if (!prodTotals[key]) prodTotals[key] = { name: p.name, qty: 0, kilos: 0 };
+      prodTotals[key].qty += Number(it.qty);
+      const spec = historicalSpec(it, p);
+      const w = it.specWeightKg != null ? it.specWeightKg : (spec ? spec.weightKg : p.weightKg);
+      if (w) {
+        const lineKilos = Number(it.qty) * Number(w);
+        prodTotals[key].kilos += lineKilos;
+        totalKilos += lineKilos;
+      }
+    });
+  });
+  const totalsLine = `<div style="color:#f59e0b;font-weight:700;margin-bottom:6px">• Total: ${Q(totalMoney)} &nbsp;&nbsp;&nbsp; • Total: ${_sfFmtKilos(totalKilos)} kilos</div>`;
+  const entries = Object.values(prodTotals).map(t => {
+    const kilosTxt = t.kilos ? ` (${_sfFmtKilos(t.kilos)} kilos)` : '';
+    return `<span style="color:#f1f5f9;font-size:11px;margin-right:10px">• ${t.name}: <strong style="color:#10b981">${t.qty}</strong>${kilosTxt}</span>`;
+  });
+  let rows = '';
+  for (let i = 0; i < entries.length; i += 2) rows += `<div style="margin-bottom:3px">${entries.slice(i, i+2).join('')}</div>`;
+  return totalsLine + rows;
+}
+
 // Congela el precio de cualquier pedido guardado que aún no lo tenga
 // (pedidos de antes de que el precio quedara "congelado" por línea).
 // Sin esto, esas líneas leían el precio de lista EN VIVO, así que

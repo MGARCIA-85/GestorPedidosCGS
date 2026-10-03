@@ -597,18 +597,9 @@ function updateRouteSelBar() {
   // hace falta calcular ni empujar nada a mano.
   bar.style.display = 'flex';
   document.getElementById('route-sel-count').textContent = n + ' pedido' + (n!==1?'s':'') + ' seleccionado' + (n!==1?'s':'');
-  // Resumen
+  // Resumen: total, kilos y productos (formato compartido con Pedidos generales y la ficha del cliente)
   const selOrds = allSel.map(id => S.orders.find(o=>o.id===id)).filter(Boolean);
-  const total = selOrds.reduce((s,o)=>s+orderTotalWithIva(o),0);
-  const prods = {};
-  selOrds.forEach(o => o.items.forEach(it => {
-    const p = S.products.find(x=>x.id===(it.productId||Number(it.pid)));
-    const k = (p?p.name:'—');
-    prods[k] = (prods[k]||0) + Number(it.qty);
-  }));
-  const prodLines = Object.entries(prods).map(([k,v])=>`• ${k}: <strong style="color:#f1f5f9">${v}</strong>`).join(' &nbsp;');
-  document.getElementById('route-sel-summary').innerHTML =
-    `<div style="color:#f59e0b;font-weight:700;margin-bottom:3px">Total: ${Q(total)}</div>${prodLines}`;
+  document.getElementById('route-sel-summary').innerHTML = ordersSummaryHtml(selOrds);
 }
 
 function selectAllRouteVisible() {
