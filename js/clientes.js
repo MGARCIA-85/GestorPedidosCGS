@@ -286,6 +286,7 @@ function updateCliOrdSummary(cid) {
   if (!chks.length) { panel.style.display = 'none'; return; }
 
   const totals = {};
+  let kilos = 0;
   chks.forEach(chk => {
     const oid = Number(chk.dataset.oid);
     const o = S.orders.find(x => x.id === oid);
@@ -294,15 +295,18 @@ function updateCliOrdSummary(cid) {
       const p = S.products.find(x => x.id === it.productId);
       if (!p) return;
       const key = it.productId;
-      if (!totals[key]) totals[key] = { name: p.name, spec: p.presentation || '', qty: 0 };
+      if (!totals[key]) totals[key] = { name: p.name, qty: 0 };
       totals[key].qty += Number(it.qty);
+      const spec = historicalSpec(it, p);
+      const w = it.specWeightKg != null ? it.specWeightKg : (spec ? spec.weightKg : p.weightKg);
+      if (w) kilos += Number(it.qty) * Number(w);
     });
   });
 
   const lines = Object.values(totals).map(t => {
-    const spec = t.spec ? ` (${t.spec})` : '';
-    return `<span style="color:#f1f5f9;font-weight:600;margin-right:10px">${t.name}${spec} = <span style="color:#10b981">${t.qty}</span></span>`;
+    return `<span style="color:#f1f5f9;font-weight:600;margin-right:10px">${t.name} = <span style="color:#10b981">${t.qty}</span></span>`;
   }).join('');
+  const kilosLine = kilos ? `<div style="font-size:11px;color:#94a3b8;margin-bottom:4px">⚖️ Kilos: <strong style="color:#f1f5f9">${_sfFmtKilos(kilos)}</strong></div>` : '';
 
   panel.innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
@@ -312,8 +316,39 @@ function updateCliOrdSummary(cid) {
         <button onclick="clearCliOrdSel(${cid})" style="background:transparent;border:1px solid #ef4444;border-radius:5px;color:#ef4444;padding:2px 8px;font-size:11px;cursor:pointer">✕ Limpiar</button>
       </div>
     </div>
-    <div style="display:flex;flex-wrap:wrap;gap:4px;font-size:12px">${lines}</div>`;
+    ${kilosLine}
+    <div style="display:flex;flex-wrap:wrap;gap:4px;font-size:12px;margin-bottom:8px">${lines}</div>
+    <div style="display:flex;gap:6px;margin-bottom:6px">
+      <button onclick="toggleCliOrdSort()" style="flex:1;padding:7px 10px;background:transparent;border:1px solid #475569;border-radius:7px;color:#94a3b8;font-size:12px;font-weight:700;cursor:pointer" id="btn-cli-ord-sort">🕐 ${window._cliOrdAsc?'Antiguos':'Recientes'}</button>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:6px">
+      <button onclick="generateOrderReportFromCli(${cid})" style="width:100%;padding:9px;background:#3b82f6;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:800;cursor:pointer">🧾 Detalle de pedidos seleccionados</button>
+      <button onclick="shareOrderReportFromCli(${cid})" style="width:100%;padding:9px;background:#10b981;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:800;cursor:pointer">✉️ Enviar pedidos seleccionados por correo</button>
+    </div>`;
   panel.style.display = 'block';
+}
+
+// Reutilizan el "Detalle"/"Enviar" de Pedidos generales, con los pedidos
+// marcados aquí dentro de la ficha del cliente.
+function generateOrderReportFromCli(cid) {
+  const ids = [...document.querySelectorAll(`.cli-ord-chk[data-cid="${cid}"]:checked`)].map(chk => Number(chk.dataset.oid));
+  if (!ids.length) return toast('Selecciona al menos un pedido', '#f59e0b');
+  generateOrderReport(ids);
+}
+function shareOrderReportFromCli(cid) {
+  const ids = [...document.querySelectorAll(`.cli-ord-chk[data-cid="${cid}"]:checked`)].map(chk => Number(chk.dataset.oid));
+  if (!ids.length) return toast('Selecciona al menos un pedido', '#f59e0b');
+  const prevSel = window._ordSel; // no perder una selección que estuviera activa en Pedidos generales
+  window._ordSel = new Set(ids);
+  shareOrderReportSel();
+  window._ordSel = prevSel;
+}
+
+// Orden (recientes/antiguos primero) de los pedidos dentro de la ficha
+// de cada cliente — antes siempre era fijo, recientes primero.
+function toggleCliOrdSort() {
+  window._cliOrdAsc = !window._cliOrdAsc;
+  renderClients();
 }
 
 function selectAllCliOrds(cid) {
@@ -791,7 +826,7 @@ ${(()=>{
 
 ${(()=>{
   const _effIds = getEffectiveClientIds(c.id);
-  const cliOrds = [...S.orders].filter(o=>_effIds.includes(Number(o.clientId))).sort((a,b)=>{ const td=ordDateTs(b)-ordDateTs(a); return td!==0?td:b.id-a.id; });
+  const cliOrds = [...S.orders].filter(o=>_effIds.includes(Number(o.clientId))).sort((a,b)=>{ const td=window._cliOrdAsc?ordDateTs(a)-ordDateTs(b):ordDateTs(b)-ordDateTs(a); return td!==0?td:(window._cliOrdAsc?a.id-b.id:b.id-a.id); });
   if (!cliOrds.length) return '';
   const rows_map = {};
   cliOrds.forEach(o=>{
