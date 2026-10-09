@@ -787,25 +787,31 @@ ${(()=>{
   const notes = S.clientNotesArr[c.id] || [];
   const noteRows = notes.map((n,i) => {
     const isOpen = window._noteOpen && window._noteOpen[`${c.id}_${i}`];
+    const isEdit = isOpen && window._noteEdit && window._noteEdit[`${c.id}_${i}`];
     return `<div class="sortable-item cli-note-item" data-idx="${i}" style="background:#0d0f18;border:1px solid #2a3050;border-radius:8px;margin-bottom:6px;overflow:hidden">
       <div onclick="toggleCliNote(${c.id},${i})" style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;cursor:pointer">
         <span class="drag-handle" style="font-size:14px;flex-shrink:0;margin-right:6px">≡</span>
-        <span style="font-size:12px;color:#f1f5f9;font-weight:600;flex:1">${n.title||'Sin título'}</span>        <div style="display:flex;gap:6px;align-items:center">
+        <span style="font-size:12px;color:#f1f5f9;font-weight:600;flex:1">${(n.title||'Sin título').replace(/&/g,'&amp;').replace(/</g,'&lt;')}</span>        <div style="display:flex;gap:6px;align-items:center">
           <button onclick="event.stopPropagation();deleteCliNote(${c.id},${i})" style="background:none;border:none;color:#ef4444;cursor:pointer;font-size:13px;padding:0 2px">✕</button>
           <span style="color:#64748b;font-size:11px">${isOpen?'▲':'▼'}</span>
         </div>
       </div>
-      ${isOpen ? `<div style="padding:8px 10px;border-top:1px solid #2a3050">
+      ${isOpen ? (isEdit ? `<div style="padding:8px 10px;border-top:1px solid #2a3050">
         <input id="note-title-${c.id}-${i}" value="${(n.title||'').replace(/"/g,'&quot;')}" placeholder="Título..."
           style="width:100%;background:#161929;border:1px solid #2a3050;border-radius:6px;padding:6px 8px;color:#f1f5f9;font-size:13px;font-weight:600;margin-bottom:8px;box-sizing:border-box"/>
-        <!-- Editor de texto simple -->
         <textarea id="note-body-${c.id}-${i}"
-          style="width:100%;background:#ffffff;border:1px solid #2a3050;border-radius:6px;padding:10px;color:#1e293b;font-size:14px;line-height:1.7;box-sizing:border-box;min-height:200px;outline:none;word-break:break-word;font-family:inherit;resize:vertical">${(n.body||'').replace(/<br>/g,'\n').replace(/<[^>]*>/g,'')}</textarea>
+          style="width:100%;background:#ffffff;border:1px solid #2a3050;border-radius:6px;padding:10px;color:#1e293b;font-size:14px;line-height:1.7;box-sizing:border-box;min-height:200px;outline:none;word-break:break-word;font-family:inherit;resize:vertical">${noteBodyPlain(n).replace(/&/g,'&amp;').replace(/</g,'&lt;')}</textarea>
         <div style="display:flex;gap:8px;margin-top:8px">
           <button onclick="saveCliNote(${c.id},${i})" style="flex:1;padding:8px;background:#10b981;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer">💾 Guardar</button>
-          <button onclick="toggleCliNote(${c.id},${i})" style="flex:1;padding:8px;background:#475569;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer">✕ Cancelar</button>
+          <button onclick="cancelCliNoteEdit(${c.id},${i})" style="flex:1;padding:8px;background:#475569;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer">✕ Cancelar</button>
         </div>
-      </div>` : ''}
+      </div>` : `<div style="padding:8px 10px;border-top:1px solid #2a3050">
+        <div style="background:#ffffff;border-radius:6px;padding:10px;color:#1e293b;font-size:14px;line-height:1.7;min-height:60px;white-space:pre-wrap;word-break:break-word;user-select:text;-webkit-user-select:text">${noteBodyPlain(n).replace(/&/g,'&amp;').replace(/</g,'&lt;')||'<span style="color:#94a3b8">(Nota vacía)</span>'}</div>
+        <div style="display:flex;gap:8px;margin-top:8px">
+          <button onclick="copyCliNote(${c.id},${i})" style="flex:1;padding:8px;background:#3b82f6;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer">📋 Copiar</button>
+          <button onclick="editCliNote(${c.id},${i})" style="flex:1;padding:8px;background:#f59e0b;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:700;cursor:pointer">✏️ Editar</button>
+        </div>
+      </div>`) : ''}
     </div>`;
   }).join('');
   return `<div style="margin-top:10px;border-top:1px solid #2a3050;padding-top:10px">
@@ -1276,13 +1282,19 @@ function removeCliComment(cid, idx) {
   save(); renderClients();
 }
 
+function noteBodyPlain(n) {
+  return (n.body||'').replace(/<br>/g,'\n').replace(/<[^>]*>/g,'');
+}
+
 function addCliNote(cid) {
   if (!S.clientNotesArr) S.clientNotesArr = {};
   if (!S.clientNotesArr[cid]) S.clientNotesArr[cid] = [];
   const idx = S.clientNotesArr[cid].length;
   S.clientNotesArr[cid].push({ title: '', body: '' });
   if (!window._noteOpen) window._noteOpen = {};
+  if (!window._noteEdit) window._noteEdit = {};
   window._noteOpen[`${cid}_${idx}`] = true;
+  window._noteEdit[`${cid}_${idx}`] = true;   // nota nueva: abre directo en edición
   save(); renderClients();
   setTimeout(() => {
     const el = document.getElementById(`note-title-${cid}-${idx}`);
@@ -1290,14 +1302,53 @@ function addCliNote(cid) {
   }, 100);
 }
 
+// Tocar la nota: abre/cierra la vista de solo lectura
 function toggleCliNote(cid, idx) {
   if (!window._noteOpen) window._noteOpen = {};
+  if (!window._noteEdit) window._noteEdit = {};
   const key = `${cid}_${idx}`;
   window._noteOpen[key] = !window._noteOpen[key];
+  window._noteEdit[key] = false;
   renderClients();
 }
 
+function editCliNote(cid, idx) {
+  if (!window._noteEdit) window._noteEdit = {};
+  window._noteEdit[`${cid}_${idx}`] = true;
+  renderClients();
+}
 
+// Cancelar la edición: no se guarda nada. Si era una nota nueva y vacía, se quita.
+function cancelCliNoteEdit(cid, idx) {
+  if (!window._noteEdit) window._noteEdit = {};
+  const n = S.clientNotesArr && S.clientNotesArr[cid] && S.clientNotesArr[cid][idx];
+  if (n && !(n.title||'').trim() && !(n.body||'').trim()) {
+    S.clientNotesArr[cid].splice(idx, 1);
+    window._noteOpen = {}; window._noteEdit = {};
+    save();
+  } else {
+    window._noteEdit[`${cid}_${idx}`] = false;
+  }
+  renderClients();
+}
+
+function copyCliNote(cid, idx) {
+  const n = S.clientNotesArr && S.clientNotesArr[cid] && S.clientNotesArr[cid][idx];
+  if (!n) return;
+  const txt = noteBodyPlain(n);
+  const ok = () => toast('📋 Nota copiada', '#10b981');
+  const legacy = () => {
+    try {
+      const ta = document.createElement('textarea');
+      ta.value = txt; ta.style.cssText = 'position:fixed;opacity:0';
+      document.body.appendChild(ta); ta.select();
+      const r = document.execCommand('copy'); ta.remove();
+      r ? ok() : toast('No se pudo copiar', '#ef4444');
+    } catch(e) { toast('No se pudo copiar', '#ef4444'); }
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(ok).catch(legacy);
+  else legacy();
+}
 
 function saveCliNote(cid, idx) {
   if (!S.clientNotesArr || !S.clientNotesArr[cid]) return;
@@ -1305,14 +1356,16 @@ function saveCliNote(cid, idx) {
   const bodyEl = document.getElementById(`note-body-${cid}-${idx}`);
   const body = bodyEl ? bodyEl.value.trim() : '';
   S.clientNotesArr[cid][idx] = { title, body };
-  if (!window._noteOpen) window._noteOpen = {};
-  window._noteOpen[`${cid}_${idx}`] = false;
+  if (!window._noteEdit) window._noteEdit = {};
+  window._noteEdit[`${cid}_${idx}`] = false;   // vuelve a la vista de lectura
   save(); toast('📝 Nota guardada', '#10b981'); renderClients();
 }
 
 function deleteCliNote(cid, idx) {
   if (!S.clientNotesArr || !S.clientNotesArr[cid]) return;
   S.clientNotesArr[cid].splice(idx, 1);
+  // Las posiciones cambian: cerrar las notas abiertas de este cliente
+  ['_noteOpen','_noteEdit'].forEach(w => { if (window[w]) Object.keys(window[w]).forEach(k => { if (k.startsWith(cid+'_')) delete window[w][k]; }); });
   save(); renderClients();
 }
 
@@ -1397,6 +1450,9 @@ function saveClientNotesOrder(container, cid) {
   // que quede mostrando el contenido de otra nota por error.
   if (window._noteOpen) {
     Object.keys(window._noteOpen).forEach(k => { if (k.startsWith(cid+'_')) delete window._noteOpen[k]; });
+  }
+  if (window._noteEdit) {
+    Object.keys(window._noteEdit).forEach(k => { if (k.startsWith(cid+'_')) delete window._noteEdit[k]; });
   }
   save(); renderClients();
 }

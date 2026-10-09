@@ -982,6 +982,29 @@ if (bonusBox) {
 }
 }
 
+// Aviso cuando el campo de cotización está vacío: permite cotizar igual o cancelar para llenarlo
+let _emptyQuoteCb = null;
+function askEmptyQuote(onOk, focusId) {
+  _emptyQuoteCb = onOk;
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:9999;display:flex;align-items:center;justify-content:center;padding:16px';
+  overlay.innerHTML = `<div style="background:#1e2236;border:1px solid #f59e0b;border-radius:14px;padding:20px;max-width:360px;width:100%">
+    <div style="font-size:15px;font-weight:800;color:#f59e0b;margin-bottom:8px">⚠️ Cotización vacía</div>
+    <div style="font-size:13px;color:#cbd5e1;margin-bottom:6px">El campo <b>"# Cotización"</b> está vacío.</div>
+    <div style="font-size:12px;color:#94a3b8">¿Deseas cotizar de todas formas o cancelar para llenar el campo?</div>
+    <div style="display:flex;flex-direction:column;gap:8px;margin-top:16px">
+      <button id="eq-ok" style="padding:10px;background:#10b981;border:none;border-radius:8px;color:#fff;font-weight:700;font-size:14px;cursor:pointer">✅ Cotizar de todas formas</button>
+      <button id="eq-cancel" style="padding:10px;background:#2a3050;border:1px solid #f59e0b;border-radius:8px;color:#f59e0b;font-weight:700;font-size:14px;cursor:pointer">✏️ Cancelar y llenar cotización</button>
+    </div>
+  </div>`;
+  document.body.appendChild(overlay);
+  overlay.querySelector('#eq-ok').onclick = () => { overlay.remove(); const cb=_emptyQuoteCb; _emptyQuoteCb=null; if (cb) cb(); };
+  overlay.querySelector('#eq-cancel').onclick = () => {
+    overlay.remove(); _emptyQuoteCb = null;
+    if (focusId) { const el = document.getElementById(focusId); if (el) { el.scrollIntoView({block:'center'}); el.focus(); } }
+  };
+}
+
 function submitOrder(isQuote) {
 const cid = Number(document.getElementById('ord-cli').value);
 if (!cid) return alert('Selecciona un cliente.');
@@ -991,6 +1014,12 @@ if (editingOid === null) {
 }
 const valid = ordItems.filter(it => it.pid && Number(it.qty) > 0);
 if (!valid.length && !ordBonusLines.length) return alert('Agrega al menos un producto o una bonificación.');
+
+// Cotizar con el campo de cotización vacío: preguntar en vez de bloquear
+if (isQuote && !window._quoteEmptyOk && !(document.getElementById('ord-quote')?.value.trim())) {
+  askEmptyQuote(() => { window._quoteEmptyOk = true; try { submitOrder(true); } finally { window._quoteEmptyOk = false; } }, 'ord-quote');
+  return;
+}
 
 // Validar que los productos con más de una especificación activa tengan una
 // asignada (activa o no — solo se exige elegir si nunca se asignó ninguna)
@@ -1262,7 +1291,6 @@ return;
 
 // Cotización temporal (no se guarda)
 if (isQuote) {
-if (!quote) return alert('Debe llenar el campo de cotización.');
 showQuote({
 id: 'T'+Date.now(), clientId:cli.id, clientName:cli.name,
 quote, note, comments, items, applyIva, pricesIncIva, date:nowDateTimeStr(), status:'Cotización', isTemp:true,
@@ -2803,7 +2831,7 @@ let currentQuote = null;
 
 function showQuoteFromOrder(id) {
 const o = S.orders.find(x=>x.id===id); if (!o) return;
-if (!o.quote || !o.quote.trim()) { toast('Debe llenar el campo de cotización primero', '#ef4444'); return; }
+if (!o.quote || !o.quote.trim()) { askEmptyQuote(() => showQuote(o)); return; }
 showQuote(o);
 }
 
@@ -2861,7 +2889,7 @@ return `<div class="qt">
 <div class="qt-biz"><h2>${b.name||'Mi Negocio'}</h2>${bizLines}</div>
 </div>
 <div style="font-size:16px;font-weight:800;margin-top:16px;margin-bottom:1px;color:#111">COTIZACIÓN</div>
-<div style="font-size:16px;font-weight:900;margin-bottom:4px;color:#111">N° ${qNum}</div>
+${ord.quote?`<div style="font-size:16px;font-weight:900;margin-bottom:4px;color:#111">N° ${qNum}</div>`:''}
 <div style="font-size:12px;color:#6b7280;margin-bottom:2px">Fecha: ${(ord.date||'').split(',')[0]}</div>
 <div style="font-size:13px;margin-top:2px">Cliente: <strong>${ord.clientName}</strong></div>
 ${ord.contact?`<div style="font-size:13px;margin-top:2px">Contacto: <strong>${ord.contact}</strong></div>`:''}

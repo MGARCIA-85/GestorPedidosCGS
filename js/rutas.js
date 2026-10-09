@@ -655,11 +655,109 @@ function toggleRouteByStatus(status) {
   updateRouteSelBar();
 }
 
-function saveRouteEmailConfig() {
+// ── Cuerpo del correo: varios textos guardados (dentro de S → entran al respaldo) ──
+function routeEmailTexts() {
+  if (!Array.isArray(S.routeEmailTexts)) S.routeEmailTexts = [];
+  return S.routeEmailTexts;
+}
+
+// Texto que se usa al enviar los pedidos de la ruta ('' si no hay ninguno elegido)
+function routeEmailBody() {
+  const t = routeEmailTexts().find(x => x.id === S.routeEmailActiveId);
+  return t ? (t.body || '') : '';
+}
+
+function _escRE(x) { return String(x==null?'':x).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;'); }
+
+function renderRouteEmailPanel() {
+  const box = document.getElementById('route-email-panel');
+  if (!box) return;
+  const list = routeEmailTexts();
+  const editId = window._routeEmailEdit;   // null = sin editar, 'new' = nuevo, número = editando ese
+  let h = '<div style="font-size:11px;color:#94a3b8;margin-bottom:8px">Toca un texto para usarlo como cuerpo del correo al enviar los pedidos seleccionados de la ruta.</div>';
+  if (!list.length) h += '<div style="font-size:12px;color:#64748b;margin-bottom:8px">Aún no hay textos guardados.</div>';
+  list.forEach(t => {
+    const active = t.id === S.routeEmailActiveId;
+    if (editId === t.id) return;   // el que se edita se muestra en el formulario de abajo
+    h += `<div style="background:#0d0f18;border:1px solid ${active?'#10b981':'#2a3050'};border-radius:8px;margin-bottom:6px;padding:8px 10px">
+      <div onclick="selectRouteEmailText(${t.id})" style="cursor:pointer">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:6px">
+          <span style="font-size:12px;font-weight:700;color:${active?'#4ade80':'#f1f5f9'}">${active?'✔ ':''}${_escRE(t.name||'Sin nombre')}</span>
+          ${active?'<span style="font-size:10px;color:#4ade80;font-weight:700">EN USO</span>':''}
+        </div>
+        <div style="font-size:11px;color:#94a3b8;margin-top:3px;white-space:pre-wrap;word-break:break-word;max-height:3.6em;overflow:hidden">${_escRE(t.body)||'(vacío)'}</div>
+      </div>
+      <div style="display:flex;gap:6px;margin-top:6px">
+        <button onclick="editRouteEmailText(${t.id})" style="flex:1;padding:5px;background:#2a3050;border:none;border-radius:6px;color:#f1f5f9;font-size:11px;cursor:pointer">✏️ Editar</button>
+        <button onclick="deleteRouteEmailText(${t.id})" style="padding:5px 10px;background:none;border:1px solid #ef4444;border-radius:6px;color:#ef4444;font-size:11px;cursor:pointer">🗑</button>
+      </div>
+    </div>`;
+  });
+  if (editId !== null && editId !== undefined) {
+    const cur = editId === 'new' ? { name:'', body:'' } : (list.find(x => x.id === editId) || { name:'', body:'' });
+    h += `<div style="border:1px solid #064e3b;border-radius:8px;padding:8px 10px;margin-bottom:6px">
+      <label class="lbl">Nombre del texto</label>
+      <input class="inp" id="route-email-name" value="${_escRE(cur.name)}" placeholder="Ej: Informe semanal"/>
+      <label class="lbl">✏️ Texto del correo</label>
+      <textarea class="inp" id="route-email-body" rows="5" placeholder="Ej: Adjunto el informe de pedidos de la ruta. Saludos." style="resize:vertical;font-family:inherit">${_escRE(cur.body)}</textarea>
+      <div style="display:flex;gap:8px;margin-top:4px">
+        <button class="bg" style="flex:1" onclick="saveRouteEmailText()">💾 Guardar</button>
+        <button class="bs" style="flex:1" onclick="cancelRouteEmailEdit()">✕ Cancelar</button>
+      </div>
+    </div>`;
+  } else {
+    h += '<button class="bg" style="width:100%;margin-top:2px" onclick="editRouteEmailText(\'new\')">➕ Nuevo texto</button>';
+  }
+  box.innerHTML = h;
+}
+
+function selectRouteEmailText(id) {
+  // Tocar el texto en uso lo deja sin texto (correo sin cuerpo)
+  S.routeEmailActiveId = (S.routeEmailActiveId === id) ? null : id;
+  save();
+  toast(S.routeEmailActiveId ? '✅ Texto del correo seleccionado' : 'Correo sin texto', '#10b981');
+  renderRouteEmailPanel();
+}
+
+function editRouteEmailText(id) {
+  window._routeEmailEdit = id;
+  renderRouteEmailPanel();
+  setTimeout(() => { const el = document.getElementById('route-email-body'); if (el) el.focus(); }, 50);
+}
+
+function cancelRouteEmailEdit() {
+  window._routeEmailEdit = null;
+  renderRouteEmailPanel();
+}
+
+function saveRouteEmailText() {
+  const name = document.getElementById('route-email-name')?.value.trim() || '';
   const body = document.getElementById('route-email-body')?.value.trim() || '';
-  localStorage.setItem('route_email_body', body);
-  toast('✅ Configuración de correo guardada');
-  document.getElementById('email-route-body').style.display = 'none';
+  if (!body) return toast('Escribe el texto del correo','#f59e0b');
+  const list = routeEmailTexts();
+  const editId = window._routeEmailEdit;
+  if (editId === 'new' || editId === null || editId === undefined) {
+    const id = list.length ? Math.max(...list.map(x=>x.id)) + 1 : 1;
+    list.push({ id, name: name || ('Texto ' + (list.length + 1)), body });
+    S.routeEmailActiveId = id;   // el recién guardado queda en uso
+  } else {
+    const t = list.find(x => x.id === editId);
+    if (t) { t.name = name || t.name || 'Sin nombre'; t.body = body; }
+  }
+  window._routeEmailEdit = null;
+  save();
+  toast('✅ Texto del correo guardado');
+  renderRouteEmailPanel();
+}
+
+function deleteRouteEmailText(id) {
+  const t = routeEmailTexts().find(x => x.id === id);
+  if (!t) return;
+  if (!confirm('¿Eliminar el texto "' + (t.name||'Sin nombre') + '"?')) return;
+  S.routeEmailTexts = routeEmailTexts().filter(x => x.id !== id);
+  if (S.routeEmailActiveId === id) S.routeEmailActiveId = null;
+  save();
+  renderRouteEmailPanel();
 }
 
 async function shareRouteSelEmail() {
@@ -676,7 +774,7 @@ async function shareRouteSelEmail() {
   } else if (_rutasSel.length > 1) {
     subject = _rutasSel.map(r=>r.name).join(', ');
   }
-  const bodyText = localStorage.getItem('route_email_body') || '';
+  const bodyText = routeEmailBody();
   let htmlContent = null;
   if (allSelArr.length === 1) {
     htmlContent = generateRouteReport(allSelArr[0].rid, allSelArr[0].oids, true);
@@ -884,7 +982,7 @@ const prodSummaryHTML = `<div style="margin-bottom:14px;border:1px solid #e5e7eb
 </div>`;
 
     const _emailSubject = route.name || localStorage.getItem('route_email_subject') || 'Informe de Ruta';
-  const _emailBody    = localStorage.getItem('route_email_body') || '';
+  const _emailBody    = routeEmailBody();
   const _mailtoHref   = 'mailto:?subject=' + encodeURIComponent(_emailSubject) + '&body=' + encodeURIComponent(_emailBody);
 
   const html = `<!DOCTYPE html><html><head><meta charset="utf-8"><title>Informe ${route.name}</title>

@@ -74,6 +74,15 @@ if (!S.biz.emoji)    S.biz.emoji    = '📦';
 if (!S.biz.logoData) S.biz.logoData = '';
 if (!S.biz.footer)   S.biz.footer   = 'Cotización válida por 15 días.';
 if (!S.savedConditions) S.savedConditions = [];
+// Textos del cuerpo del correo de rutas (antes se guardaba suelto en el teléfono, fuera del respaldo)
+if (!Array.isArray(S.routeEmailTexts)) {
+  S.routeEmailTexts = [];
+  try {
+    const oldBody = (localStorage.getItem('route_email_body') || '').trim();
+    if (oldBody) { S.routeEmailTexts.push({ id:1, name:'Texto 1', body:oldBody }); S.routeEmailActiveId = 1; }
+  } catch(e) {}
+}
+if (S.routeEmailActiveId === undefined) S.routeEmailActiveId = null;
 if (!S.cp)           S.cp           = {};
 if (!S.nextOid)      S.nextOid      = (S.orders ? S.orders.length : 0) + 1;
 if (!S.depts)   S.depts   = [];

@@ -698,6 +698,14 @@ async function driveMergeAndSave(remoteData) {
   const bBiz = JSON.stringify(base.biz||{}), lBiz = JSON.stringify(S.biz||{}), rBiz = JSON.stringify(remoteData.biz||{});
   if (lBiz !== rBiz && lBiz === bBiz) mergedS.biz = remoteData.biz;
 
+  // Textos del cuerpo del correo: si solo cambió el respaldo, usar el del respaldo
+  if (remoteData.routeEmailTexts) {
+    const bT = JSON.stringify([base.routeEmailTexts||[], base.routeEmailActiveId||null]);
+    const lT = JSON.stringify([S.routeEmailTexts||[], S.routeEmailActiveId||null]);
+    const rT = JSON.stringify([remoteData.routeEmailTexts||[], remoteData.routeEmailActiveId||null]);
+    if (lT !== rT && lT === bT) { mergedS.routeEmailTexts = remoteData.routeEmailTexts; mergedS.routeEmailActiveId = remoteData.routeEmailActiveId||null; }
+  }
+
   // Contadores de próximos IDs: usar el mayor de ambos lados para no repetir IDs
   ['nextPid','nextCid','nextOid','nextDeptId','nextMunId','nextRutaClienteId'].forEach(k => {
     mergedS[k] = Math.max(S[k]||1, remoteData[k]||1);
