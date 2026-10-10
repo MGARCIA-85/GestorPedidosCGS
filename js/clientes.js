@@ -2247,7 +2247,7 @@ function showPriceListDoc(cid) {
 
   const rows = prods.map(p =>
     `<tr>
-      <td style="padding:7px 10px;border-bottom:1px solid #e2e8f0;font-size:13px;color:#1e293b">${p.name}${p.presentation ? ` <span style="font-size:11px;color:#64748b">(${p.presentation})</span>` : ''}</td>
+      <td style="padding:7px 10px;border-bottom:1px solid #e2e8f0;font-size:13px;color:#1e293b">${p.name}</td>
       <td style="padding:7px 10px;border-bottom:1px solid #e2e8f0;font-size:13px;font-weight:700;text-align:right;color:#1e293b">${Qf(p.pr)}<span style="font-size:10px;color:#64748b">/${p.ul}</span></td>
     </tr>`
   ).join('');
@@ -2262,7 +2262,7 @@ function showPriceListDoc(cid) {
     msg += '*Cliente:* ' + c.name + '\n';
     msg += '*Fecha:* ' + today + '\n\n';
     prods.forEach(p => {
-      msg += '- *' + p.name + (p.presentation ? ' ' + p.presentation : '') + '*\n';
+      msg += '- *' + p.name + '*\n';
       msg += 'Precio ' + Qf(p.pr) + '/' + p.ul + '\n';
     });
     if (footerTxt) msg += '\n' + footerTxt;
@@ -2310,28 +2310,45 @@ function showPriceListDoc(cid) {
       <!-- Texto personalizado -->
       <div style="padding:0 20px 14px">
         <textarea id="footer-ta-${cid}" placeholder="Escribe un texto personalizado (opcional)..." style="width:100%;border:1px solid #e2e8f0;border-radius:8px;padding:8px;font-size:12px;resize:vertical;min-height:55px;box-sizing:border-box">${savedFooter}</textarea>
-        <div style="display:flex;gap:8px;margin-top:6px;flex-wrap:wrap">
-          <button onclick="savePLFooter(${cid})" style="background:#1e3a5f;color:#fff;border:none;padding:8px 14px;border-radius:8px;font-size:12px;cursor:pointer">💾 Guardar texto</button>
-          <button onclick="printPL(${cid})" style="background:#334155;color:#fff;border:none;padding:8px 14px;border-radius:8px;font-size:12px;cursor:pointer">🖨 Imprimir / PDF</button>
-          <button onclick="waPL(${cid})" style="background:#25d366;color:#fff;border:none;padding:8px 14px;border-radius:8px;font-size:12px;cursor:pointer">📤 WhatsApp</button>
-          <button onclick="document.getElementById('${modalId}').remove()" style="background:#ef4444;color:#fff;border:none;padding:8px 14px;border-radius:8px;font-size:12px;cursor:pointer">✕ Cerrar</button>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px">
+          <button onclick="copyPL(${cid})" style="background:#1e3a5f;color:#fff;border:none;padding:9px 6px;border-radius:8px;font-size:12px;cursor:pointer">📋 Copiar texto</button>
+          <button onclick="printPL(${cid})" style="background:#334155;color:#fff;border:none;padding:9px 6px;border-radius:8px;font-size:12px;cursor:pointer">🖨 Imprimir / PDF</button>
+          <button onclick="waPL(${cid})" style="background:#25d366;color:#fff;border:none;padding:9px 6px;border-radius:8px;font-size:12px;cursor:pointer">📤 WhatsApp</button>
+          <button onclick="document.getElementById('${modalId}').remove()" style="background:#ef4444;color:#fff;border:none;padding:9px 6px;border-radius:8px;font-size:12px;cursor:pointer">✕ Cerrar</button>
         </div>
       </div>
     </div>`;
 
   document.body.appendChild(modal);
 
-  // Guardar texto personalizado
-  window['savePLFooter'] = function(id) {
+  // El texto personalizado se recuerda solo (para la próxima vez) y se muestra en el documento
+  const rememberFooter = id => {
     const txt = document.getElementById('footer-ta-' + id).value.trim();
-    localStorage.setItem('priceListFooter_' + id, txt);
+    try { localStorage.setItem('priceListFooter_' + id, txt); } catch(e) {}
     document.getElementById('footer-display-' + id).textContent = txt;
-    toast('Texto guardado ✔', '#10b981');
+    return txt;
+  };
+
+  // Copiar el listado como texto para pegarlo en otra parte
+  window['copyPL'] = function(id) {
+    const txt = buildWAMsg(rememberFooter(id));
+    const ok = () => toast('📋 Texto copiado', '#10b981');
+    const legacy = () => {
+      try {
+        const ta = document.createElement('textarea');
+        ta.value = txt; ta.style.cssText = 'position:fixed;opacity:0';
+        document.body.appendChild(ta); ta.select();
+        const r = document.execCommand('copy'); ta.remove();
+        r ? ok() : toast('No se pudo copiar', '#ef4444');
+      } catch(e) { toast('No se pudo copiar', '#ef4444'); }
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(txt).then(ok).catch(legacy);
+    else legacy();
   };
 
   // Imprimir: abre ventana solo con la parte imprimible
   window['printPL'] = function(id) {
-    const footer = document.getElementById('footer-ta-' + id).value.trim();
+    rememberFooter(id);
     const printContent = document.getElementById('price-list-printable-' + id).innerHTML;
     const w = window.open('', '_blank', 'width=700,height=900');
     if (!w) { toast('Activa ventanas emergentes para imprimir', '#f59e0b'); return; }
@@ -2352,8 +2369,7 @@ function showPriceListDoc(cid) {
 
   // WhatsApp: construir mensaje y abrir enlace directamente
   window['waPL'] = function(id) {
-    const footer = document.getElementById('footer-ta-' + id).value.trim();
-    const msg = buildWAMsg(footer);
+    const msg = buildWAMsg(rememberFooter(id));
     location.href = 'https://wa.me/?text=' + encodeURIComponent(msg);
   };
 }
