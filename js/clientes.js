@@ -561,7 +561,7 @@ const _lastPr = {};
     .sort((x,y) => { const td = ordDateTs(y)-ordDateTs(x); return td!==0 ? td : (y.id-x.id); })
     .forEach(o => (o.items||[]).forEach(it => {
       const k = Number(it.productId);
-      if (_lastPr[k] === undefined && it.customPrice != null) _lastPr[k] = Number(it.customPrice);
+      if (_lastPr[k] === undefined && it.customPrice != null) _lastPr[k] = { price: Number(it.customPrice), ts: ordDateTs(o) };
     }));
 }
 const _prRows = S.products.filter(p => {
@@ -574,8 +574,17 @@ const diff = pr - p.basePrice;
 const ul   = p.unitLabel||'unidad';
 const us   = Number(p.unitSize)||1;
 const col  = diff>0?'#10b981':diff<0?'#ef4444':'#f1f5f9';
-const last = _lastPr[Number(p.id)];
-const lastCol = (last !== undefined && Math.abs(last-pr) > 0.004) ? '#f59e0b' : '#64748b';
+const lastInfo = _lastPr[Number(p.id)];
+const last = lastInfo ? lastInfo.price : undefined;
+// Naranja: el último precio es distinto al vigente. Blanco: es igual y es de este mes. Gris: es igual pero de meses anteriores.
+let lastCol = '#64748b';
+if (lastInfo) {
+  if (Math.abs(last-pr) > 0.004) lastCol = '#f59e0b';
+  else {
+    const d = new Date(lastInfo.ts), now = new Date();
+    if (d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth()) lastCol = '#f1f5f9';
+  }
+}
 const lastTxt = last !== undefined ? `(${Q(last)})` : '';
 const nm = `<span style="color:#94a3b8;padding:3px 0">${p.name}${p.presentation?` <span class="tag">${p.presentation}</span>`:''}</span>`;
 return nm
@@ -585,7 +594,7 @@ return nm
 }).join('');
 const prows = _prRows
   ? `<div style="display:grid;grid-template-columns:1fr auto auto auto;column-gap:8px;align-items:center;font-size:12px;margin-bottom:6px">
-<span></span><span style="font-size:9px;color:#64748b;text-align:right;grid-column:2/4">PRECIO</span><span style="font-size:9px;color:#64748b;text-align:right">ÚLT. PEDIDO</span>
+<span></span><span style="font-size:9px;color:#f1f5f9;text-align:right;font-weight:700">PRECIO</span><span></span><span style="font-size:9px;color:#f1f5f9;text-align:right;font-weight:700;white-space:nowrap">ÚLT. PEDIDO</span>
 ${_prRows}</div>`
   : '';
 const isCliOpen = !!window._cliOpen[c.id];
