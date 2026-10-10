@@ -706,6 +706,9 @@ async function driveMergeAndSave(remoteData) {
     if (lT !== rT && lT === bT) { mergedS.routeEmailTexts = remoteData.routeEmailTexts; mergedS.routeEmailActiveId = remoteData.routeEmailActiveId||null; }
   }
 
+  // Textos personalizados de las listas de precios (uno por cliente): se combinan; si ambos lados cambiaron la misma, gana el local
+  mergedS.priceListFooters = Object.assign({}, remoteData.priceListFooters||{}, S.priceListFooters||{});
+
   // Contadores de próximos IDs: usar el mayor de ambos lados para no repetir IDs
   ['nextPid','nextCid','nextOid','nextDeptId','nextMunId','nextRutaClienteId'].forEach(k => {
     mergedS[k] = Math.max(S[k]||1, remoteData[k]||1);

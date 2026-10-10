@@ -553,7 +553,18 @@ const card = document.createElement('div');
 card.className = 'card sortable-item'; card.id = 'cc-'+c.id; card.dataset.id = c.id;
 const _cpData = S.cp[c.id] || S.cp[String(c.id)] || {};
 const _hasCustomList = !!(_cpData._visible && _cpData._visible.length > 0);
-const prows = S.products.filter(p => {
+// Último precio colocado en un pedido (no cancelado) por producto, para este cliente
+const _lastPr = {};
+{
+  const _ids = getEffectiveClientIds(c.id);
+  [...S.orders].filter(o => !o.cancelled && _ids.includes(Number(o.clientId)))
+    .sort((x,y) => { const td = ordDateTs(y)-ordDateTs(x); return td!==0 ? td : (y.id-x.id); })
+    .forEach(o => (o.items||[]).forEach(it => {
+      const k = Number(it.productId);
+      if (_lastPr[k] === undefined && it.customPrice != null) _lastPr[k] = Number(it.customPrice);
+    }));
+}
+const _prRows = S.products.filter(p => {
 const cp = _cpData;
 const visible = cp._visible;
 return !visible || visible.includes(p.id) || visible.includes(String(p.id));
@@ -563,13 +574,20 @@ const diff = pr - p.basePrice;
 const ul   = p.unitLabel||'unidad';
 const us   = Number(p.unitSize)||1;
 const col  = diff>0?'#10b981':diff<0?'#ef4444':'#f1f5f9';
-const dt   = diff!==0 ? ` <span style="font-size:10px;opacity:.75">(${diff>0?'+':''}${Q(diff)})</span>` : '';
-const hint = us>1 ? ` <span style="font-size:10px;color:#64748b">/${ul}</span>` : '';
-return `<div class="prow">
-<span style="color:#94a3b8">${p.name}${p.presentation?` <span class="tag">${p.presentation}</span>`:''}</span>
-<span style="font-weight:700;color:${col}">${Q(pr)}${hint}${dt}</span>
-</div>`;
+const last = _lastPr[Number(p.id)];
+const lastCol = (last !== undefined && Math.abs(last-pr) > 0.004) ? '#f59e0b' : '#64748b';
+const lastTxt = last !== undefined ? `(${Q(last)})` : '';
+const nm = `<span style="color:#94a3b8;padding:3px 0">${p.name}${p.presentation?` <span class="tag">${p.presentation}</span>`:''}</span>`;
+return nm
++ `<span style="font-weight:700;color:${col};text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums">${Q(pr)}</span>`
++ `<span style="font-size:10px;color:#64748b;white-space:nowrap">${us>1?'/'+ul:''}</span>`
++ `<span style="font-size:11px;color:${lastCol};text-align:right;white-space:nowrap;font-variant-numeric:tabular-nums">${lastTxt}</span>`;
 }).join('');
+const prows = _prRows
+  ? `<div style="display:grid;grid-template-columns:1fr auto auto auto;column-gap:8px;align-items:center;font-size:12px;margin-bottom:6px">
+<span></span><span style="font-size:9px;color:#64748b;text-align:right;grid-column:2/4">PRECIO</span><span style="font-size:9px;color:#64748b;text-align:right">ÚLT. PEDIDO</span>
+${_prRows}</div>`
+  : '';
 const isCliOpen = !!window._cliOpen[c.id];
 card.innerHTML = `
 <div style="display:flex;justify-content:space-between;align-items:flex-start;cursor:pointer" onclick="toggleCli(${c.id})">
@@ -2235,7 +2253,14 @@ function showPriceListDoc(cid) {
 
   // Leer texto personalizado guardado en la app principal
   const FOOTER_KEY = 'priceListFooter_' + cid;
-  const savedFooter = localStorage.getItem(FOOTER_KEY) || '';
+  if (!S.priceListFooters) S.priceListFooters = {};
+  // Antes se guardaba suelto en el teléfono: se pasa a los datos de la app (entra al respaldo)
+  if (S.priceListFooters[cid] === undefined) {
+    let legacy = '';
+    try { legacy = localStorage.getItem(FOOTER_KEY) || ''; } catch(e) {}
+    if (legacy) { S.priceListFooters[cid] = legacy; save(); }
+  }
+  const savedFooter = S.priceListFooters[cid] || '';
 
   const prods = S.products
     .filter(p => visible.includes(Number(p.id)))
@@ -2324,7 +2349,8 @@ function showPriceListDoc(cid) {
   // El texto personalizado se recuerda solo (para la próxima vez) y se muestra en el documento
   const rememberFooter = id => {
     const txt = document.getElementById('footer-ta-' + id).value.trim();
-    try { localStorage.setItem('priceListFooter_' + id, txt); } catch(e) {}
+    if (!S.priceListFooters) S.priceListFooters = {};
+    if ((S.priceListFooters[id] || '') !== txt) { S.priceListFooters[id] = txt; save(); }
     document.getElementById('footer-display-' + id).textContent = txt;
     return txt;
   };
