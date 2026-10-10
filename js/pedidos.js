@@ -2386,6 +2386,11 @@ function generateOrderReport(selIds) {
   table{font-size:12px}th,td{font-size:12px}
   @media print{button{display:none!important}body{padding:6px}}</style>
   </head><body>
+  <div style="margin-bottom:14px;display:flex;gap:16px;padding:0 12px">
+    <button onclick="document.body.style.zoom=(parseFloat(document.body.style.zoom||1)-0.1).toFixed(1)" style="padding:16px 28px;background:#475569;color:#fff;border:none;border-radius:8px;font-size:32px;cursor:pointer;font-weight:700;line-height:1">－</button>
+    <button onclick="window.print()" style="flex:1;padding:16px 4px;background:#1d4ed8;color:#fff;border:none;border-radius:8px;font-size:13px;cursor:pointer;font-weight:700">🖨️ Imprimir / PDF</button>
+    <button onclick="document.body.style.zoom=(parseFloat(document.body.style.zoom||1)+0.1).toFixed(1)" style="padding:16px 28px;background:#475569;color:#fff;border:none;border-radius:8px;font-size:32px;cursor:pointer;font-weight:700;line-height:1">＋</button>
+  </div>
   <div class="hdr">
     <div style="display:flex;gap:12px;align-items:center"><div>
       <div style="font-size:19px;font-weight:900">${b.name||'Mi Negocio'}</div>
@@ -2395,19 +2400,14 @@ function generateOrderReport(selIds) {
       <div style="font-size:11px;color:#6b7280">${periodo}</div>
     </div>
   </div>
-  <div class="sum">
-    <div class="sb"><div class="l">Pedidos</div><div class="v">${filtered.length}</div></div>
-    <div class="sb"><div class="l">TOTAL</div><div class="v" style="color:#d97706">${Q(tot)}</div></div>
-    ${totalWeightKg > 0 ? `<div class="sb"><div class="l">PESO TOTAL</div><div class="v" style="color:#1d4ed8">${totalWeightKg.toLocaleString('es-GT',{maximumFractionDigits:2})} kg</div></div>` : ''}
-  </div>
-  <div style="margin-bottom:14px;display:flex;gap:16px;padding:0 12px">
-    <button onclick="document.body.style.zoom=(parseFloat(document.body.style.zoom||1)-0.1).toFixed(1)" style="padding:16px 28px;background:#475569;color:#fff;border:none;border-radius:8px;font-size:32px;cursor:pointer;font-weight:700;line-height:1">－</button>
-    <button onclick="window.print()" style="flex:1;padding:16px 4px;background:#1d4ed8;color:#fff;border:none;border-radius:8px;font-size:13px;cursor:pointer;font-weight:700">🖨️ Imprimir / PDF</button>
-    <button onclick="document.body.style.zoom=(parseFloat(document.body.style.zoom||1)+0.1).toFixed(1)" style="padding:16px 28px;background:#475569;color:#fff;border:none;border-radius:8px;font-size:32px;cursor:pointer;font-weight:700;line-height:1">＋</button>
-  </div>
   <div style="margin-bottom:14px;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden">
     <div style="background:#1e3a8a;color:#fff;padding:7px 12px;font-weight:800;font-size:13px">📦 Resumen de Productos</div>
     <div style="column-count:3;column-gap:0;column-rule:1px solid #e5e7eb">${prodSummaryRows}</div>
+  </div>
+  <div class="sum">
+    <div class="sb"><div class="l">PEDIDOS</div><div class="v">${filtered.length}</div></div>
+    <div class="sb"><div class="l">TOTAL</div><div class="v" style="color:#d97706">${Q(tot)}</div></div>
+    ${totalWeightKg > 0 ? `<div class="sb"><div class="l">PESO TOTAL</div><div class="v" style="color:#1d4ed8">${totalWeightKg.toLocaleString('es-GT',{maximumFractionDigits:2})} kg</div></div>` : ''}
   </div>
   ${rows}
 </body></html>`;
