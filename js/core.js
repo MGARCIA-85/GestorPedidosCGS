@@ -634,7 +634,11 @@ function askConfirm(msg, sub, cb, btnText, btnColor, icon) {
   _confirmCb = cb;
 }
 
-function bonusAlertConfirm() { if (window._bonusAlertConfirmCb) window._bonusAlertConfirmCb(); window._bonusAlertConfirmCb=null; window._bonusAlertCancelCb=null; }
+function bonusAlertConfirm() {
+  // Si falta algo por elegir (por ejemplo la especificación), el aviso queda abierto para completarlo
+  if (window._bonusAlertConfirmCb && window._bonusAlertConfirmCb() === false) return;
+  window._bonusAlertConfirmCb=null; window._bonusAlertCancelCb=null;
+}
 function bonusAlertCancel()  { if (window._bonusAlertCancelCb)  window._bonusAlertCancelCb();  window._bonusAlertConfirmCb=null; window._bonusAlertCancelCb=null; }
 
 

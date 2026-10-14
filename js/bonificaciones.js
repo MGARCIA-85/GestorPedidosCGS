@@ -1820,6 +1820,41 @@ function runVerifyOldBonusForClient(cid) {
   renderClients();
 }
 
+// Especificación de una línea de bonificación en el aviso de meta cumplida:
+// con una sola activa se fija sola; con varias activas hay que elegir una.
+function baSpecSelectHtml(pid, selId) {
+  const p = S.products.find(x => x.id === Number(pid));
+  if (!p) return '<span></span>';
+  ensureProductSpecs(p);
+  let pool = p.specs.filter(s => s.active);
+  if (!pool.length) pool = p.specs.slice(0, 1);
+  const label = s => `${s.label}${s.weightKg ? ' · ' + s.weightKg + 'kg' : ''}`;
+  if (pool.length === 1) {
+    return `<select class="ba-spec" style="width:100%;background:#0d0f18;color:#f1f5f9;border:1px solid #2a3050;border-radius:6px;padding:4px;font-size:11px"><option value="${pool[0].id}" selected>${label(pool[0])}</option></select>`;
+  }
+  const chosen = pool.some(s => String(s.id) === String(selId)) ? String(selId) : '';
+  return `<select class="ba-spec" onchange="baSpecChanged(this)" style="width:100%;background:${chosen?'#0d0f18':'#2a1010'};color:${chosen?'#f1f5f9':'#ef4444'};border:1px solid ${chosen?'#2a3050':'#ef4444'};border-radius:6px;padding:4px;font-size:11px">
+    <option value="">-- Elegir especificación --</option>
+    ${pool.map(s => `<option value="${s.id}" ${String(s.id)===chosen?'selected':''}>${label(s)}</option>`).join('')}
+  </select>`;
+}
+function baSpecChanged(sel) {
+  const ok = !!sel.value;
+  sel.style.background = ok ? '#0d0f18' : '#2a1010';
+  sel.style.color = ok ? '#f1f5f9' : '#ef4444';
+  sel.style.borderColor = ok ? '#2a3050' : '#ef4444';
+}
+// Al cambiar el producto de una fila: nueva especificación y precio de lista
+function baProdChanged(sel) {
+  const row = sel.closest('.ba-row'); if (!row) return;
+  const pid = Number(sel.value);
+  const p = S.products.find(x => x.id === pid);
+  const wrap = row.querySelector('.ba-spec-wrap');
+  if (wrap) wrap.innerHTML = baSpecSelectHtml(pid, null);
+  const pr = row.querySelector('.ba-price');
+  if (pr) pr.value = cliPrice(Number(window._baCid), pid, p ? (p.basePrice||0) : 0);
+}
+
 function checkBonusAlert(cid, oid, onDone, extraOrd) {
   if (!S.bonuses || !S.bonuses[cid]) return false;
   // Si el pedido ya tiene una bonificación cargada, no mostrar la alerta
@@ -1839,16 +1874,19 @@ function checkBonusAlert(cid, oid, onDone, extraOrd) {
   const prodOpts = S.products.map(p=>`<option value="${p.id}">${p.name}</option>`).join('');
   const bonusRowsHtml = (r.bonusItems||[]).map((bi,i) => {
     const pOpts = S.products.map(p=>`<option value="${p.id}" ${p.id===Number(bi.productId)?'selected':''}>${p.name}</option>`).join('');
-    const defaultPr = bi.price != null ? bi.price : cliPrice(cid, bi.productId, S.products.find(x=>x.id===Number(bi.productId))?.basePrice||0);
+    // Precio por defecto: el de la lista de precios del cliente (editable)
+    const defaultPr = cliPrice(cid, bi.productId, S.products.find(x=>x.id===Number(bi.productId))?.basePrice||0);
     return `<div class="ba-row" style="background:#0d1f0d;border:1px solid #1a3a1a;border-radius:8px;padding:6px;margin-bottom:6px">
       <div style="display:grid;grid-template-columns:1fr 45px 70px;gap:4px;align-items:center;margin-bottom:4px">
-        <select class="ba-pid" style="background:#0d0f18;color:#f1f5f9;border:1px solid #2a3050;border-radius:6px;padding:4px;font-size:11px;min-width:0">${pOpts}</select>
+        <select class="ba-pid" onchange="baProdChanged(this)" style="background:#0d0f18;color:#f1f5f9;border:1px solid #2a3050;border-radius:6px;padding:4px;font-size:11px;min-width:0">${pOpts}</select>
         <input type="number" class="ba-qty" value="${bi.qty}" min="1" style="background:#0d0f18;color:#f1f5f9;border:1px solid #2a3050;border-radius:6px;padding:4px;font-size:11px;width:100%"/>
         <input type="number" class="ba-price" value="${defaultPr}" min="0" step="0.01" placeholder="Precio" style="background:#0d0f18;color:#f1f5f9;border:1px solid #2a3050;border-radius:6px;padding:4px;font-size:11px;width:100%"/>
       </div>
+      <div class="ba-spec-wrap" style="margin-bottom:4px">${baSpecSelectHtml(bi.productId, bi.specId)}</div>
       <input class="ba-comment" value="${bi.comment||''}" placeholder="Comentario (ej: Por consumo Trim. Q2)" style="width:100%;background:#0d0f18;color:#f1f5f9;border:1px solid #2a3050;border-radius:6px;padding:4px 8px;font-size:11px"/>
     </div>`;
   }).join('');
+  window._baCid = cid;
 
   document.getElementById('bonus-modal-body').innerHTML = `
     <div style="font-size:24px;margin-bottom:6px;text-align:center">🎁</div>
@@ -1865,6 +1903,13 @@ function checkBonusAlert(cid, oid, onDone, extraOrd) {
   window._bonusAlertConfirmCb = () => {
     const ord = S.orders.find(o=>o.id===oid); if (!ord) return;
     const rows = document.querySelectorAll('.ba-row');
+    // Si algún producto tiene varias especificaciones activas, hay que elegir una antes de agregar
+    const _sinEspec = [...rows].filter(row => !row.querySelector('.ba-spec')?.value);
+    if (_sinEspec.length) {
+      const nombres = _sinEspec.map(row => { const pp = S.products.find(x=>x.id===Number(row.querySelector('.ba-pid')?.value)); return pp ? pp.name : ''; }).join(', ');
+      toast('Elige la especificación de: ' + nombres, '#f59e0b');
+      return false;   // el aviso se queda abierto
+    }
     if (!ord.bonusLines) ord.bonusLines = [];
     const deliveredItems = [];
     rows.forEach(row => {
@@ -1874,7 +1919,13 @@ function checkBonusAlert(cid, oid, onDone, extraOrd) {
       const pr       = priceRaw !== '' && priceRaw != null ? Number(priceRaw) : cliPrice(cid, pid, S.products.find(x=>x.id===pid)?.basePrice||0);
       const comment  = row.querySelector('.ba-comment')?.value.trim() || '';
       const ruleLabel = comment || r.name || '';
-      ord.bonusLines.push({ productId:pid, qty, price:pr, ruleName:ruleLabel, fromRuleId: Number(ri) });
+      const _p = S.products.find(x=>x.id===pid);
+      const _specId = Number(row.querySelector('.ba-spec')?.value);
+      const _spec = _p ? (ensureProductSpecs(_p), _p.specs.find(s=>String(s.id)===String(_specId))) : null;
+      const _line = { productId:pid, qty, price:pr, ruleName:ruleLabel, fromRuleId: Number(ri) };
+      // Se "congela" la especificación elegida, igual que en las líneas de venta
+      if (_spec) { _line.specId = _spec.id; _line.specLabel = _spec.label; _line.specWeightKg = _spec.weightKg; _line.specUnitSize = _spec.unitSize; }
+      ord.bonusLines.push(_line);
       deliveredItems.push({ productId:pid, qty, price:pr });
     });
     ord.status = 'Confirmado';
@@ -1984,7 +2035,10 @@ function sendBonusOrder(cid, ri) {
   // Cargar las líneas de bonificación de la regla, marcadas con la regla de origen
   ordBonusLines = (r.bonusItems||[]).map(bi => {
     const p = S.products.find(x=>x.id===Number(bi.productId));
-    return { productId: Number(bi.productId), qty: Number(bi.qty)||1, price: bi.price!=null?bi.price:(p?p.basePrice||0:0), ruleName: r.name||'Bonificación', fromRuleId: Number(ri) };
+    // Precio por defecto: el de la lista del cliente. Especificación: la activa (si hay varias, se elige en el formulario)
+    let specId = null;
+    if (p) { ensureProductSpecs(p); const act = p.specs.filter(s=>s.active); if (act.length === 1) specId = act[0].id; }
+    return { productId: Number(bi.productId), qty: Number(bi.qty)||1, price: cliPrice(_cid, Number(bi.productId), p?p.basePrice||0:0), specId, ruleName: r.name||'Bonificación', fromRuleId: Number(ri) };
   });
   window._bonusConfirmed = true;
   window._pendingBonusReset = { cid: _cid, ri: Number(ri) };
