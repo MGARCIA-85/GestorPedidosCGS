@@ -2135,12 +2135,17 @@ function generateOrderReportSel() {
   updateOrdSelBar();
 }
 
-function shareOrderReportSel() {
-  if (!window._ordSel || window._ordSel.size === 0) {
+// orderedIds (opcional): lista de pedidos ya en el orden en que se muestran (ficha del cliente).
+// Con ella se respeta ese orden y no se descartan pedidos por los filtros de Pedidos generales.
+function shareOrderReportSel(orderedIds) {
+  const hasOrdered = Array.isArray(orderedIds);
+  if (hasOrdered ? !orderedIds.length : (!window._ordSel || window._ordSel.size === 0)) {
     return toast('Selecciona al menos un pedido con ☑️', '#f59e0b');
   }
-  const selIds = [...window._ordSel];
-  let filtered = getReportFiltered().filter(o => selIds.includes(o.id));
+  const selIds = hasOrdered ? orderedIds : [...window._ordSel];
+  let filtered = hasOrdered
+    ? orderedIds.map(id => S.orders.find(o => o.id === id)).filter(Boolean)
+    : getReportFiltered().filter(o => selIds.includes(o.id));
   if (!filtered.length) return toast('Sin pedidos para compartir','#f59e0b');
 
   // Helper: extraer comentarios de un pedido
@@ -2278,9 +2283,15 @@ function shareOrderReportSel() {
   updateOrdSelBar();
 }
 
-function generateOrderReport(selIds) {
-  let filtered = getReportFiltered();
-  if (selIds) filtered = filtered.filter(o => selIds.includes(o.id));
+function generateOrderReport(selIds, keepGivenOrder) {
+  let filtered;
+  if (selIds && keepGivenOrder) {
+    // Desde la ficha del cliente: los pedidos van en el orden en que se muestran
+    filtered = selIds.map(id => S.orders.find(o => o.id === id)).filter(Boolean);
+  } else {
+    filtered = getReportFiltered();
+    if (selIds) filtered = filtered.filter(o => selIds.includes(o.id));
+  }
   if (!filtered.length) return toast('Sin pedidos para el filtro seleccionado','#f59e0b');
   const b = S.biz;
   const fCli  = (document.getElementById('f-cli-report')?.value||'').trim();

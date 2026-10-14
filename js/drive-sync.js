@@ -344,6 +344,7 @@ async function checkRemoteSyncStatus() {
   const lastSyncedSnap = localStorage.getItem('gpgt_last_synced_snapshot');
   if (!lastSyncedSnap) return; // primera conexión — ya la maneja el flujo inicial de conectar Drive
   if (_syncCheckInProgress) return;
+  if (_driveSaveBusy) return; // hay una subida en curso: el resultado se anota solo al terminar
   if (document.getElementById('confirm-modal')?.style.display === 'flex') return; // ya hay un modal abierto
   _syncCheckInProgress = true;
   try {
@@ -352,6 +353,17 @@ async function checkRemoteSyncStatus() {
     const lastSyncedTime = localStorage.getItem('gpgt_last_synced_time');
     const remoteChanged = !lastSyncedTime || meta.modifiedTime !== lastSyncedTime;
     if (!remoteChanged) return; // nada nuevo en Drive
+    // ¿El cambio en Drive lo hizo este mismo dispositivo? (pasa si la app pasó a segundo plano
+    // o se cerró justo mientras subía, y no alcanzó a anotar la respuesta de Drive)
+    const remoteContent = await driveFetchRemoteContent(meta.id);
+    if (remoteContent) {
+      const rStr = JSON.stringify(remoteContent, null, 2);
+      if (_isOwnUploadHash(_syncHash(rStr)) || rStr === JSON.stringify(S, null, 2)) {
+        markSynced(remoteContent, meta.modifiedTime);
+        if (hasUnsyncedLocalChanges()) driveSaveBackup(false); // quedaron cambios nuevos por subir
+        return;
+      }
+    }
     if (hasUnsyncedLocalChanges()) {
       showSyncConflictModal(meta);
     } else {
@@ -505,11 +517,45 @@ function driveDisconnect() {
   renderDriveStatus();
 }
 
+// Huella corta de un texto (para reconocer lo que ESTE dispositivo subió a Drive)
+function _syncHash(str) {
+  let h = 5381;
+  for (let i = 0; i < str.length; i++) h = ((h << 5) + h + str.charCodeAt(i)) | 0;
+  return str.length + ':' + (h >>> 0).toString(36);
+}
+function _rememberOwnUpload(hash) {
+  try {
+    const list = JSON.parse(localStorage.getItem('gpgt_own_upload_hashes') || '[]');
+    list.push(hash);
+    localStorage.setItem('gpgt_own_upload_hashes', JSON.stringify(list.slice(-15)));
+  } catch(e) {}
+}
+function _isOwnUploadHash(hash) {
+  try { return JSON.parse(localStorage.getItem('gpgt_own_upload_hashes') || '[]').includes(hash); } catch(e) { return false; }
+}
+
+// Una sola subida a la vez: si llega otra mientras una está en curso, se espera y se vuelve a subir
+// (antes se podían cruzar dos subidas y el celular se confundía creyendo que otro dispositivo había cambiado los datos).
+let _driveSaveBusy = false, _driveSaveQueued = false;
 async function driveSaveBackup(showToast=true, _reintento=false) {
+  if (_reintento) return _driveSaveBackupRun(showToast, true);
+  if (_driveSaveBusy) { _driveSaveQueued = true; return; }
+  _driveSaveBusy = true;
+  try {
+    await _driveSaveBackupRun(showToast, false);
+  } finally {
+    _driveSaveBusy = false;
+    if (_driveSaveQueued) { _driveSaveQueued = false; driveSaveBackup(false); }
+  }
+}
+
+async function _driveSaveBackupRun(showToast=true, _reintento=false) {
   const ok = await driveEnsureToken();
   if (!ok || !_driveToken) return;
   try {
     const data = JSON.stringify(S, null, 2);
+    // Se anota ANTES de subir: si la app se cierra a medias, igual se sabrá que ese contenido es nuestro
+    _rememberOwnUpload(_syncHash(data));
     const fileId = _driveFileId || localStorage.getItem('gpgt_drive_file_id');
     let url, method;
     if (fileId) {
@@ -562,7 +608,7 @@ async function driveSaveBackup(showToast=true, _reintento=false) {
         if (!_reintento) {
           _driveTokenExpiry = 0;
           const renewed = await driveEnsureToken();
-          if (renewed) return driveSaveBackup(showToast, true);
+          if (renewed) return _driveSaveBackupRun(showToast, true);
         }
         renderDriveStatus();
       }

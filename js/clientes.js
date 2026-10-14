@@ -275,6 +275,8 @@ function toggleCliMonthSec(secId) {
 function toggleCliOrdSel(cid, oid, checked) {
   if (!window._cliOrdSel) window._cliOrdSel = new Set();
   if (checked) window._cliOrdSel.add(oid); else window._cliOrdSel.delete(oid);
+  window._cliOrdPanelCid = cid;
+  persistCliOrdSel();
   updateCliOrdSummary(cid);
 }
 
@@ -292,6 +294,7 @@ function updateCliOrdSummary(cid) {
 
   if (!chks.length) {
     panel.style.display = 'none';
+    persistCliOrdSel();
     if (window._cliOrdAsc) { window._cliOrdAsc = false; renderClients(); } // el orden elegido se pierde al quedar sin selección
     return;
   }
@@ -317,27 +320,65 @@ function updateCliOrdSummary(cid) {
   panel.style.display = 'block';
 }
 
+// Pedidos marcados en la ficha, EN EL ORDEN EN QUE SE MUESTRAN (Recientes / Antiguos).
+// Ese mismo orden es el que llevan el detalle y el correo.
+function cliOrdSelectedIdsInDisplayOrder(cid) {
+  const sel = window._cliOrdSel || new Set();
+  const ids = [];
+  document.querySelectorAll(`.cli-ord-chk[data-cid="${cid}"]`).forEach(chk => {
+    const oid = Number(chk.dataset.oid);
+    if (sel.has(oid) && !ids.includes(oid)) ids.push(oid);
+  });
+  if (ids.length) return ids;
+  // Respaldo (la ficha no está dibujada): ordenar igual que la lista
+  const asc = !!window._cliOrdAsc;
+  return [...sel].map(id => S.orders.find(o => o.id === id)).filter(Boolean)
+    .sort((a,b) => { const td = asc ? ordDateTs(a)-ordDateTs(b) : ordDateTs(b)-ordDateTs(a); return td!==0 ? td : (asc ? a.id-b.id : b.id-a.id); })
+    .map(o => o.id);
+}
+
+// La selección también se guarda en el teléfono: si Android cierra la app (por ejemplo
+// al pasar al correo o a WhatsApp), al volver la selección sigue ahí.
+function persistCliOrdSel() {
+  try {
+    const sel = window._cliOrdSel;
+    if (sel && sel.size) localStorage.setItem('cgs_cli_ord_sel', JSON.stringify({ ids:[...sel], cid:window._cliOrdPanelCid||null, asc:!!window._cliOrdAsc, t:Date.now() }));
+    else localStorage.removeItem('cgs_cli_ord_sel');
+  } catch(e) {}
+}
+function restoreCliOrdSel() {
+  try {
+    const raw = localStorage.getItem('cgs_cli_ord_sel');
+    if (!raw) return;
+    const d = JSON.parse(raw);
+    if (!d || !Array.isArray(d.ids) || Date.now() - (d.t||0) > 12*3600*1000) { localStorage.removeItem('cgs_cli_ord_sel'); return; }
+    const valid = d.ids.filter(id => S.orders.some(o => o.id === id));
+    if (!valid.length) { localStorage.removeItem('cgs_cli_ord_sel'); return; }
+    window._cliOrdSel = new Set(valid);
+    window._cliOrdPanelCid = d.cid || null;
+    window._cliOrdAsc = !!d.asc;
+  } catch(e) {}
+}
+
 // Reutilizan el "Detalle"/"Enviar" de Pedidos generales, con los pedidos
-// marcados aquí dentro de la ficha del cliente.
+// marcados aquí dentro de la ficha del cliente (en el orden en que se muestran).
 function generateOrderReportFromCli(cid) {
-  const ids = [...(window._cliOrdSel||new Set())];
+  const ids = cliOrdSelectedIdsInDisplayOrder(cid);
   if (!ids.length) return toast('Selecciona al menos un pedido', '#f59e0b');
-  generateOrderReport(ids);
+  generateOrderReport(ids, true);
 }
 function shareOrderReportFromCli(cid) {
-  const ids = [...(window._cliOrdSel||new Set())];
+  const ids = cliOrdSelectedIdsInDisplayOrder(cid);
   if (!ids.length) return toast('Selecciona al menos un pedido', '#f59e0b');
-  const prevSel = window._ordSel; // no perder una selección que estuviera activa en Pedidos generales
-  window._ordSel = new Set(ids);
-  shareOrderReportSel();
-  window._ordSel = prevSel;
+  shareOrderReportSel(ids);
 }
 
 // Orden (recientes/antiguos primero) de los pedidos dentro de la ficha
 // de cada cliente — antes siempre era fijo, recientes primero.
 function toggleCliOrdSort() {
   window._cliOrdAsc = !window._cliOrdAsc;
-  renderClients();
+  persistCliOrdSel();
+  renderClients();   // al terminar de dibujar, renderClients vuelve a mostrar el panel con la selección y el orden vigentes
 }
 
 function selectAllCliOrds(cid) {
@@ -346,6 +387,8 @@ function selectAllCliOrds(cid) {
     window._cliOrdSel.add(Number(chk.dataset.oid));
     chk.checked = true;
   });
+  window._cliOrdPanelCid = cid;
+  persistCliOrdSel();
   updateCliOrdSummary(cid);
 }
 
@@ -354,6 +397,7 @@ function clearCliOrdSel(cid) {
     if (window._cliOrdSel) window._cliOrdSel.delete(Number(chk.dataset.oid));
     chk.checked = false;
   });
+  persistCliOrdSel();
   const panel = document.getElementById('cli-ord-fixed-summary');
   if (panel) panel.style.display = 'none';
   if (window._cliOrdAsc) { window._cliOrdAsc = false; renderClients(); } // el orden elegido se pierde al limpiar
@@ -430,6 +474,11 @@ function renderClients() {
   }
   _renderClientsInternal();
   initOpenClientSortSections();
+  // Volver a mostrar el panel de pedidos marcados (etiqueta Recientes/Antiguos y conteo al día)
+  if (window._cliOrdSel && window._cliOrdSel.size) {
+    const _pc = window._cliOrdPanelCid;
+    if (_pc && document.querySelector(`.cli-ord-chk[data-cid="${_pc}"]:checked`)) updateCliOrdSummary(_pc);
+  }
   if (floatCid) {
     setTimeout(() => restoreFloatingCard(floatCid), 50);
   }
@@ -908,7 +957,7 @@ ${orderInfoHtml(o, {delivery:true})}
           if (!groups[key]) groups[key] = {label, orders:[]};
           groups[key].orders.push(o);
         });
-        return Object.keys(groups).sort().reverse().map(key => {
+        return (window._cliOrdAsc ? Object.keys(groups).sort() : Object.keys(groups).sort().reverse()).map(key => {
           const g = groups[key];
           const secId = `cso-month-${c.id}-${key}`;
           const isMonthOpen = window._cliSecOpen && window._cliSecOpen[secId] === true;
